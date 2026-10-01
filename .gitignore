@@ -1,0 +1,21 @@
+# runtime data (archives / staging / node.json) — never commit user data
+data/
+*.ztar
+*.manifest.json
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# internal dev scaffolding (not part of the open-source tree)
+.scratch/
+docs/
+tools/
+AGENTS.md
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>zsync · zcode 环境同步</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">zsync <span class="sub">zcode 开发环境备份 · 同步 · 迁移</span></div>
+  <div id="state-line" class="state-line">连接中…</div>
+</header>
+
+<nav>
+  <button class="tab active" data-tab="backup">📦 项目备份 <small>本机客户端</small></button>
+  <button class="tab" data-tab="remote">☁️ 服务器仓库 <small>拉取恢复</small></button>
+  <button class="tab" data-tab="settings">⚙️ 客户端设置</button>
+  <button class="tab" data-tab="jobs">🧾 任务与日志</button>
+</nav>
+
+<main>
+<!-- ============ 项目备份(本机客户端) ============ -->
+<section id="tab-backup" class="panel active">
+  <div class="hint banner-hint" id="local-banner"></div>
+
+  <div class="card" id="agent-guide" style="display:none">
+    <h3>🚀 首次接入 —— 在本机启动客户端 agent</h3>
+    <p class="hint">本页面由中央服务器提供, 读取<b>本机</b> zcode 项目需要在本机运行一个轻量 agent(纯 Python 标准库, 无需安装任何依赖):</p>
+    <ol class="hint" style="line-height:2">
+      <li>下载工具包: <code id="guide-tool-url"></code></li>
+      <li>解压到任意目录(如 <code>C:\zsync</code>)</li>
+      <li>双击 <code>start-agent.cmd</code>(Windows)或运行 <code>python zsync.py serve --agent</code>(Linux/macOS)</li>
+      <li>回到本页点击「重新检测」, 首次将引导确认本机 zcode 目录(默认 <code>~/.zcode</code> 自动探测), 之后自动加载本机项目清单</li>
+    </ol>
+    <p class="hint"><small>提示: agent 只监听 127.0.0.1:8643, 不对局域网开放。浏览器若弹出"允许访问本地网络"请选择允许。开机自启: 把 start-agent.cmd 的快捷方式放入 shell:startup。</small></p>
+    <button id="btn-redetect" class="primary">重新检测本机 agent</button>
+  </div>
+
+  <div class="toolbar">
+    <input id="proj-filter" placeholder="按名称/路径筛选本机项目…" class="filter">
+    <button id="btn-refresh-projects" class="ghost">刷新</button>
+  </div>
+  <div id="projects-box" class="cards"></div>
+</section>
+
+<!-- ============ 服务器仓库 ============ -->
+<section id="tab-remote" class="panel">
+  <div class="card">
+    <h3>仓库来源</h3>
+    <div class="row">
+      <label><input type="radio" name="rsrc" value="server" checked> 服务器仓库</label>
+      <label><input type="radio" name="rsrc" value="agent"> 本机存档库(agent)</label>
+      <button id="btn-load-repo" class="ghost">刷新列表</button>
+    </div>
+    <div id="repo-box" class="repo-list"></div>
+  </div>
+
+  <div class="card" id="restore-card" style="display:none">
+    <h3>拉取恢复 —— <span id="rv-name"></span></h3>
+    <div class="pcard-meta" id="rv-meta"></div>
+    <div class="row">
+      <label style="flex:1">恢复到本机路径 <input id="target-path" class="grow" placeholder="D:\Project\myproject"></label>
+    </div>
+    <label class="hint">路径与原机器不同时自动重映射 project_id / 目录 / 记忆 slug / 会话列表索引</label>
+    <label class="warn">⚠ 恢复会写入本机 zcode 数据库(<span id="rv-zhome"></span>), 执行前请完全退出 zcode</label>
+    <div id="restore-components" class="comp-grid"></div>
+    <div class="row">
+      <button id="btn-restore" class="primary big">开始拉取恢复</button>
+      <button id="btn-vmpkg" class="ghost">生成免Python迁移包</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 客户端设置 ============ -->
+<section id="tab-settings" class="panel">
+  <div class="card">
+    <h3>客户端本机(经 agent)</h3>
+    <div id="first-visit-hint" class="hint" style="display:none;color:var(--accent)">
+      首次接入: 请确认下方本机 zcode 目录后点「保存设置」, 保存后将自动加载本机项目清单。
+    </div>
+    <div class="row"><label class="lbl">本机 zcode 目录</label>
+      <input id="set-zhome" class="grow" placeholder="C:\Users\me\.zcode">
+      <input id="set-zhome-default" type="hidden">
+      <button id="btn-detect-zhome" class="ghost">自动探测 (~/.zcode)</button>
+    </div>
+    <label class="hint">备份/恢复读写该目录下的 cli/db、rollout、memories、v2/tasks-index 等。家目录按当前用户自动探测(如 C:\Users\&lt;你&gt;\.zcode 或 /home/&lt;你&gt;/.zcode), zcode 目录迁移过则在手动指定。</label>
+    <div class="row"><label class="lbl">状态</label><span id="zhome-status" class="hint"></span></div>
+  </div>
+  <div class="card">
+    <h3>备份推送目标</h3>
+    <div class="row"><label class="lbl">服务器地址</label>
+      <input id="set-remote-url" class="grow" placeholder="http://<server-ip>:8642">
+    </div>
+    <div class="row"><label class="lbl">访问令牌</label>
+      <input id="set-remote-token" class="grow" placeholder="token(服务器启用时填写)">
+      <button id="btn-save-settings" class="primary">保存设置</button>
+      <button id="btn-test-remote" class="ghost">测试连接</button>
+    </div>
+    <div id="remote-status" class="hint"></div>
+  </div>
+  <div class="card">
+    <h3>本机存档库(agent)</h3>
+    <div id="local-archives-box" class="repo-list"></div>
+  </div>
+</section>
+
+<!-- ============ 任务 ============ -->
+<section id="tab-jobs" class="panel">
+  <div class="card">
+    <h3>客户端任务(本机 agent)</h3>
+    <div id="jobs-agent-box"></div>
+  </div>
+  <div class="card">
+    <h3>客户端日志</h3>
+    <pre id="logs-agent-box" class="logs"></pre>
+  </div>
+  <div class="card">
+    <h3>服务器任务</h3>
+    <div id="jobs-server-box"></div>
+  </div>
+  <div class="card">
+    <h3>服务器日志</h3>
+    <pre id="logs-server-box" class="logs"></pre>
+  </div>
+</section>
+</main>
+
+<!-- 进度浮层 -->
+<div id="job-float" class="hidden">
+  <div class="jf-title" id="jf-title"></div>
+  <div class="jf-bar"><div id="jf-fill"></div></div>
+  <div class="jf-detail" id="jf-detail"></div>
+</div>
+
+<!-- 文件筛选器弹窗 -->
+<div id="modal" class="modal hidden">
+  <div class="modal-body wide">
+    <div class="row">
+      <h3 id="modal-title" class="grow">项目文件筛选</h3>
+      <button id="modal-close" class="ghost">✕ 关闭</button>
+    </div>
+    <div id="filetree" class="filetree"></div>
+    <div class="row" style="margin-top:8px">
+      <input id="ft-add-ignore" class="grow" placeholder="添加排除规则, 如 site/mirror 或 *.log">
+      <button id="ft-add-btn" class="ghost">排除</button>
+    </div>
+    <div id="ft-rules" class="hint"></div>
+  </div>
+</div>
+</body>
+<script src="/app.js"></script>
+</html>
