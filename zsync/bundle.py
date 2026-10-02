@@ -151,6 +151,8 @@ class BundleStore:
         return os.path.join(self.staging_dir, archive_id)
 
     def list_archives(self) -> list[dict]:
+        """列表摘要: 剥离 files/session_titles 等随项目规模膨胀的字段
+        (大项目可达数十 MB, 会拖垮 /api/archives), 完整清单走 manifest()。"""
         out = []
         for fn in os.listdir(self.archives_dir):
             if not fn.endswith(".manifest.json"):
@@ -159,6 +161,8 @@ class BundleStore:
             try:
                 with open(os.path.join(self.archives_dir, fn), encoding="utf-8") as f:
                     m = json.load(f)
+                m.pop("files", None)
+                m.pop("session_titles", None)
                 m["archive_id"] = aid
                 zt = self.ztar_path(aid)
                 m["ztar_bytes"] = os.path.getsize(zt) if os.path.isfile(zt) else 0
@@ -272,13 +276,16 @@ class BundleBuilder:
         con, tmp = zclayout.open_ro(self.layout.db_path)
         try:
             sids = zclayout.project_session_ids(con, project_id)
-            titles = {
-                s: t
-                for s, t in con.execute(
-                    "SELECT id, title FROM session WHERE project_id=? ORDER BY time_updated DESC LIMIT 50",
-                    (project_id,),
-                )
-            }
+            # 会话标题摘要: 与 sids 同口径(含归并的 subagent), 最新优先取 50 条
+            sid_set = set(sids)
+            titles: dict = {}
+            for s, t in con.execute(
+                "SELECT id, title FROM session ORDER BY time_updated DESC"
+            ):
+                if s in sid_set:
+                    titles[s] = t
+                    if len(titles) >= 50:
+                        break
         finally:
             con.close()
             if tmp:

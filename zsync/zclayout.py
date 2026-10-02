@@ -14,6 +14,10 @@
 
   project_id = 'proj_' + 小写完整路径, 其中反斜杠/正斜杠/冒号均替换为 '-'
   memory slug = 路径最后一段(小写) + '-' + sha256(小写完整路径)[:16]
+
+  subagent_child 会话的 project_id 由其运行目录推导, 可能是项目内部子目录
+  (如 _render/_tmp/dist); 项目定义与统计只认根会话, subagent 按 parent 链
+  归属根项目(见 session_owner_map)。
 """
 from __future__ import annotations
 
@@ -163,6 +167,39 @@ def _trusted_dir(directory: str | None) -> str | None:
     return None
 
 
+def session_owner_map(con: sqlite3.Connection) -> dict[str, str]:
+    """返回 {session_id: 归属 project_id}。
+
+    subagent_child 会话的 project_id 由其运行目录推导, 常是项目内部子目录
+    (如 _render/_tmp/dist), 不代表真实项目; 将其归属到 parent 链上最近的
+    非 subagent 祖先会话所在项目。链断裂或成环时回退自身 project_id
+    (仍按独立项目处理, 保证数据不丢)。
+    """
+    try:
+        rows = con.execute(
+            "SELECT id, parent_id, task_type, project_id FROM session"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        # 旧版库无 parent_id/task_type 列: 全部按自身 project_id
+        return {sid: pid for sid, pid in con.execute(
+            "SELECT id, project_id FROM session").fetchall()}
+    meta = {sid: (parent, ttype, pid) for sid, parent, ttype, pid in rows}
+
+    def root_project(sid: str) -> str | None:
+        seen: set[str] = set()
+        cur = sid
+        while True:
+            if cur in seen or cur not in meta:
+                return meta[sid][2]
+            seen.add(cur)
+            parent, ttype, pid = meta[cur]
+            if ttype != "subagent_child" or not parent:
+                return pid
+            cur = parent
+
+    return {sid: root_project(sid) for sid in meta}
+
+
 def _sidebar_session_ids(zcode_home: str) -> set:
     """侧边栏会话列表索引中出现的全部会话 id(读不到返回空集)。"""
     from . import tasksindex
@@ -192,35 +229,52 @@ def list_projects(layout: ZcodeLayout | None = None) -> list[ProjectInfo]:
     con, tmp = open_ro(layout.db_path)
     try:
         cur = con.cursor()
-        cur.execute(
-            "SELECT project_id, count(*), max(time_updated) FROM session GROUP BY project_id"
-        )
-        stats = {r[0]: (r[1], r[2]) for r in cur.fetchall()}
-        cur.execute(
-            "SELECT project_id, directory, version FROM session ORDER BY time_updated DESC"
-        )
+        try:
+            cur.execute(
+                "SELECT id, project_id, parent_id, task_type, directory, version, "
+                "time_updated FROM session ORDER BY time_updated DESC"
+            )
+            rows = cur.fetchall()
+        except sqlite3.OperationalError:
+            # 旧版库无 parent_id/task_type 列
+            cur.execute(
+                "SELECT id, project_id, NULL, NULL, directory, version, "
+                "time_updated FROM session ORDER BY time_updated DESC"
+            )
+            rows = cur.fetchall()
+        owner = session_owner_map(con)
+        # 项目只由根会话(非 subagent_child)定义; 派生到子目录的 subagent
+        # 会话按 owner 归并, 不再产生 "_render" 之类的伪项目。
         info: dict[str, ProjectInfo] = {}
         vers: dict[str, set] = {}
-        for pid, directory, version in cur.fetchall():
-            if pid not in info:
+        sessions_of: dict[str, list[str]] = {}
+        last_of: dict[str, int] = {}
+        for sid, pid, _parent, ttype, directory, version, updated in rows:
+            opid = owner.get(sid) or pid
+            sessions_of.setdefault(opid, []).append(sid)
+            vers.setdefault(opid, set()).add(version)
+            if updated and (opid not in last_of or updated > last_of[opid]):
+                last_of[opid] = updated
+            if ttype != "subagent_child" and opid not in info:
                 path = _trusted_dir(directory)
-                info[pid] = ProjectInfo(
-                    project_id=pid,
+                info[opid] = ProjectInfo(
+                    project_id=opid,
                     path=path,
-                    name=os.path.basename(path.replace("/", "\\").rstrip("\\")) if path else pid,
+                    name=os.path.basename(path.replace("/", "\\").rstrip("\\")) if path else opid,
                 )
-            vers.setdefault(pid, set()).add(version)
+        # 孤儿 subagent(链断裂回退自身)兜底为独立项目, 数据不丢
+        for opid in sessions_of:
+            if opid not in info:
+                info[opid] = ProjectInfo(project_id=opid, path=None, name=opid)
         sidebar = _sidebar_session_ids(layout.home)
         for pid, p in info.items():
-            n, last = stats.get(pid, (0, None))
-            p.sessions = n
-            p.last_active = last
+            p.sessions = len(sessions_of.get(pid, ()))
+            p.last_active = last_of.get(pid)
             p.versions = sorted(vers.get(pid, set()))
             if p.path:
-                # 统计该项目会话的 rollout 体积(仅存在的文件)
-                cur.execute("SELECT id FROM session WHERE project_id=?", (pid,))
+                # 统计该项目会话(含归并的 subagent)的 rollout 体积(仅存在的文件)
                 total = 0
-                for (sid,) in cur.fetchall():
+                for sid in sessions_of.get(pid, ()):
                     if sid in sidebar:
                         p.in_sidebar += 1
                     f = os.path.join(layout.rollout_dir, f"model-io-{sid}.jsonl")
@@ -242,8 +296,9 @@ def list_projects(layout: ZcodeLayout | None = None) -> list[ProjectInfo]:
 
 
 def project_session_ids(con: sqlite3.Connection, project_id: str) -> list[str]:
-    cur = con.execute("SELECT id FROM session WHERE project_id=?", (project_id,))
-    return [r[0] for r in cur.fetchall()]
+    """项目名下的全部会话 id, 含派生到项目内子目录的 subagent 会话。"""
+    owner = session_owner_map(con)
+    return [sid for sid, pid in owner.items() if pid == project_id]
 
 
 def zcode_cli_version() -> str | None:

@@ -100,6 +100,24 @@ def export_project(
             return n
 
         copy_table("session", "project_id=?", (project_id,))
+        # 并入派生到项目内子目录的 subagent 会话(project_id 不同, parent 指向
+        # 已收录会话); 迭代以覆盖 subagent 再派 subagent 的嵌套。
+        if col_exists(src_con, "session", "task_type") and col_exists(
+            src_con, "session", "parent_id"
+        ):
+            while True:
+                n0 = out.execute("SELECT count(*) FROM main.session").fetchone()[0]
+                out.execute(
+                    f"INSERT OR IGNORE INTO main.session SELECT * FROM {src_name}.session "
+                    "WHERE task_type='subagent_child' "
+                    "AND parent_id IN (SELECT id FROM main.session)"
+                )
+                if out.execute("SELECT count(*) FROM main.session").fetchone()[0] == n0:
+                    break
+            counts["session"] = out.execute(
+                "SELECT count(*) FROM main.session"
+            ).fetchone()[0]
+            report("session", counts["session"])
         copy_table("permission", "project_id=?", (project_id,))
         copy_table(
             "local_setting",
@@ -308,14 +326,13 @@ def _col_rewrite_kind(table: str, col: str) -> str | None:
 
 
 def verify_import(target_db: str, project_id: str) -> dict:
-    """恢复后校验: 统计该项目的行数, 返回 {table: count}。"""
+    """恢复后校验: 统计该项目的行数(含按 parent 链归并的 subagent 会话)。"""
     con = sqlite3.connect(f"file:{target_db.replace(chr(92), '/')}?mode=ro", uri=True)
     try:
         out = {}
-        out["session"] = con.execute(
-            "SELECT count(*) FROM session WHERE project_id=?", (project_id,)
-        ).fetchone()[0]
-        sids = [r[0] for r in con.execute("SELECT id FROM session WHERE project_id=?", (project_id,))]
+        owner = zclayout.session_owner_map(con)
+        sids = [sid for sid, pid in owner.items() if pid == project_id]
+        out["session"] = len(sids)
         if sids:
             ph = ",".join("?" * len(sids))
             for t, c in (("message", "session_id"), ("part", "session_id"), ("session_entry", "session_id")):
