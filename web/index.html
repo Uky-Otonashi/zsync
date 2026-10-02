@@ -47,24 +47,28 @@
 <main class="content">
 
 <!-- —— 项目备份(本机客户端) —— -->
-<section id="tab-backup" class="panel active">
+<section id="tab-backup" class="panel active has-sticky">
+  <!-- 吸顶容器: 全幅出血遮罩(脱离面板宽度), 内层 .sticky-in 与下方 .page-body 同轴对齐 -->
   <div class="page-sticky">
-    <div class="page-head">
-      <h1 data-i18n="backup.title">项目备份</h1>
-      <p class="page-sub" data-i18n="backup.sub">本机 zcode 项目的会话、记忆与源码打包备份, 备份完成后自动推送至中央服务器</p>
-    </div>
+    <div class="sticky-in">
+      <div class="page-head">
+        <h1 data-i18n="backup.title">项目备份</h1>
+        <p class="page-sub" data-i18n="backup.sub">本机 zcode 项目的会话、记忆与源码打包备份, 备份完成后自动推送至中央服务器</p>
+      </div>
 
-    <div class="hint banner-hint" id="local-banner"></div>
+      <div class="hint banner-hint" id="local-banner"></div>
 
-    <div class="toolbar">
-      <input id="proj-filter" class="filter" data-i18n-ph="backup.filterPh" placeholder="筛选本机项目 — 名称或路径…">
-      <button id="btn-refresh-projects" class="ghost" data-i18n-title="backup.refreshTip" title="重新加载本机项目清单">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
-        <span data-i18n="common.refresh">刷新</span>
-      </button>
+      <div class="toolbar">
+        <input id="proj-filter" class="filter" data-i18n-ph="backup.filterPh" placeholder="筛选本机项目 — 名称或路径…">
+        <button id="btn-refresh-projects" class="ghost" data-i18n-title="backup.refreshTip" title="重新加载本机项目清单">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+          <span data-i18n="common.refresh">刷新</span>
+        </button>
+      </div>
     </div>
   </div>
 
+  <div class="page-body">
   <div class="card guide" id="agent-guide" style="display:none">
     <h3 data-i18n="guide.title">首次接入 —— 在本机启动客户端 agent</h3>
     <p class="hint" data-i18n="guide.intro">本页面由中央服务器提供, 读取本机 zcode 项目需要在本机运行一个轻量 agent(纯 Python 标准库, 无需安装任何依赖):</p>
@@ -81,6 +85,7 @@
   </div>
 
   <div id="projects-box" class="cards"></div>
+  </div>
 </section>
 
 <!-- —— 服务器仓库 —— -->

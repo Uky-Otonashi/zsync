@@ -456,6 +456,20 @@ function switchTab(name) {
 }
 $$(".tab").forEach(btn => btn.addEventListener("click", () => switchTab(btn.dataset.tab)));
 
+/* ---------------- 备份页吸顶: 吸附态哨兵 ----------------
+   哨兵滚出滚动容器 = 头部已吸附, 加 .is-stuck 显示底部渐隐 veil; 回到顶部即移除 */
+(() => {
+  const sticky = document.querySelector(".page-sticky");
+  const root = document.querySelector(".content");
+  if (!sticky || !root || !("IntersectionObserver" in window)) return;
+  const sentinel = document.createElement("div");
+  sentinel.style.cssText = "height:1px;margin-bottom:-1px";
+  sticky.before(sentinel);
+  new IntersectionObserver((es) => {
+    for (const e of es) sticky.classList.toggle("is-stuck", !e.isIntersecting);
+  }, { root }).observe(sentinel);
+})();
+
 /* ---------------- 首次接入引导 ---------------- */
 $("#btn-redetect").addEventListener("click", () => { $("#state-line").textContent = "重新探测中…"; init(); });
 
