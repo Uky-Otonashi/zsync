@@ -1,34 +1,35 @@
-"""zsync 节点服务: 每台机器一个节点 = 本地代理 + (可选)远端仓库。
+"""zsync HTTP 服务层: 单 Handler 双角色, 由入口决定身份。
 
-角色模型(git 式):
-  - 任意浏览器访问某节点的 GUI, 看到的是【该节点所在机器】的本地项目
-    (读取节点配置的 zcode 目录, 默认 ~/.zcode, 可改到任意盘)。
-  - 「项目备份」= 把本机项目构建成单压缩包(.ztar)并推送到配置的远端仓库。
-  - 「远端仓库/恢复」= 浏览远端(或本机)存档, 拉取到本机恢复(含路径重映射、
+角色(v0.4 拆分, 取代旧"每机一节点"):
+  - server(中央服务器): 接收客户端推送的存档、响应拉取请求、提供 Web GUI。
+    仅暴露仓库/任务/日志/静态页/上传接收等端点, 不读写本机 zcode 目录。
+  - agent(客户端本机代理): 127.0.0.1:8643, 读写本机 zcode 目录,
+    带 CORS 头供中央服务器页面跨源调用; 客户端桌面 GUI 也由它同源伺服。
+    「项目备份」= 把本机项目构建成单压缩包(.ztar)并推送到配置的远端仓库。
+    「远端仓库/恢复」= 浏览远端(或本机)存档, 拉取到本机恢复(含路径重映射、
     tasks-index 会话列表索引写入)。
-  - 纯仓库部署: 任何节点都能作为远端; 不配置远端时存档只落本机 store。
 
-API(均返回 {"ok": bool, ...}):
-  GET  /api/state                       节点状态(本地 zcode 信息 + 远端配置)
-  POST /api/settings                    {zcode_home?, remote_url?, remote_token?}
-  GET  /api/projects                    本节点本地项目清单
-  GET  /api/project-detail?project_id=  项目详情: git 状态 + 会话列表(只读)
-  GET  /api/session?sid=&offset=&limit= 会话内容浏览(消息/part, 只读, 尾部分页)
-  POST /api/git-fetch                   {project_id} 显式联网 git fetch(仅更新远端引用)
-  POST /api/project-config              {project_id, components?, source_filter?}
-  GET  /api/filetree?project_id=..&rel=..  项目文件树(带忽略标记, 供筛选器)
-  POST /api/build                       {project_id, archive_id?, live?, push?} -> job
-  POST /api/push                        {archive_id}  推送本地存档到远端 -> job
+API(均返回 {"ok": bool, ...}; [A]=仅 agent, [S]=仅 server):
+  GET  /api/state                       节点状态(角色/本地 zcode 信息 + 远端配置)
+  POST /api/settings [A]                {zcode_home?, remote_url?, remote_token?}
+  GET  /api/projects [A]                本节点本地项目清单
+  GET  /api/project-detail?project_id= [A] 项目详情: git 状态 + 会话列表(只读)
+  GET  /api/session?sid=&offset=&limit= [A] 会话内容浏览(消息/part, 只读, 尾部分页)
+  POST /api/git-fetch [A]               {project_id} 显式联网 git fetch(仅更新远端引用)
+  POST /api/project-config [A]          {project_id, components?, source_filter?}
+  GET  /api/filetree?project_id=..&rel=.. [A] 项目文件树(带忽略标记, 供筛选器)
+  POST /api/build [A]                   {project_id, archive_id?, live?, push?} -> job
+  POST /api/push [A]                    {archive_id}  推送本地存档到远端 -> job
   GET  /api/archives                    本机 store 存档
   GET  /api/archives/{id}/manifest | /download
   POST /api/archives/{id}/delete
-  POST /api/restore                     {archive_id | remote{url,token,archive_id},
+  POST /api/restore [A]                 {archive_id | remote{url,token,archive_id},
                                           target_path, components} -> job
-  POST /api/remote/list                 {url?, token?}  浏览远端存档(默认用节点配置)
-  POST /api/upload/{id}/manifest | /ztar   接收节点推送
-  POST /api/watch / GET /api/watch      实时备份
+  POST /api/remote/list [A]             {url?, token?}  浏览远端存档(默认用节点配置)
+  POST /api/upload/{id}/manifest | /ztar   接收节点推送 [S 实际使用]
+  POST /api/watch / GET /api/watch [A]  实时备份
   GET  /api/jobs /api/jobs/{id} /api/logs
-  GET  /tool.zip                        工具自身打包(目标机引导)
+  GET  /tool.zip [S]                    工具自身打包(目标机引导)
 """
 from __future__ import annotations
 
@@ -56,16 +57,38 @@ MAX_JSON_BODY = 8 * 1024 * 1024
 # 上传 manifest 单独放宽; 普通 API 仍用 MAX_JSON_BODY
 MAX_MANIFEST_BODY = 256 * 1024 * 1024
 
+# 角色门控: server(中央服务器)不暴露读写本机 zcode 的客户端端点
+AGENT_ONLY_GET = {"/api/projects", "/api/project-detail", "/api/session",
+                  "/api/session-trace", "/api/session-system", "/api/filetree",
+                  "/api/watch"}
+AGENT_ONLY_POST = {"/api/settings", "/api/build", "/api/push", "/api/restore",
+                   "/api/watch", "/api/remote/list", "/api/project-config",
+                   "/api/git-fetch"}
+SERVER_ONLY_GET = {"/tool.zip"}
+
+
+def _gate(ctx: "ServerContext", path: str, method: str) -> str | None:
+    """返回拒绝理由(None=放行)。server 角色拒绝客户端专属端点, 反之亦然。"""
+    if ctx.mode == "server":
+        if method == "GET" and path in AGENT_ONLY_GET:
+            return "该端点属客户端 agent, 服务器不读写本机 zcode 目录"
+        if method == "POST" and path in AGENT_ONLY_POST:
+            return "该端点属客户端 agent, 服务器不读写本机 zcode 目录"
+    else:
+        if method == "GET" and path in SERVER_ONLY_GET:
+            return "该端点属中央服务器"
+    return None
+
 
 class ServerContext:
     def __init__(self, store_dir: str, port: int, token: str | None = None,
                  web_dir: str | None = None, tool_root: str | None = None,
-                 mode: str = "node"):
+                 mode: str = "server"):
         self.store = BundleStore(store_dir)
         self.cfg = NodeConfig(store_dir)
         self.port = port
         self.token = token
-        self.mode = mode  # node=完整节点 / agent=客户端本机代理(供中央服务器页面调用)
+        self.mode = mode  # server=中央服务器 / agent=客户端本机代理(供服务器页面或桌面 GUI 调用)
         self.jobman = jobs.JobManager()
         self.layout = zclayout.ZcodeLayout(self.cfg.zcode_home)
         self.watchman = watcher.WatchManager(
@@ -141,7 +164,7 @@ def _check_token(ctx: ServerContext, handler: BaseHTTPRequestHandler) -> bool:
 class Handler(BaseHTTPRequestHandler):
     ctx: ServerContext = None  # type: ignore[assignment]
     protocol_version = "HTTP/1.1"
-    server_version = "zsync/0.2"
+    server_version = "zsync/0.4"
 
     def log_message(self, fmt, *args):
         pass
@@ -209,6 +232,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_file(os.path.join(self.ctx.web_dir, "style.css"), "text/css; charset=utf-8")
                 return
             if path == "/tool.zip":
+                if self.ctx.mode != "server":
+                    self._send_error_json("该端点属中央服务器", 404)
+                    return
                 self._send_tool_zip()
                 return
             if not path.startswith("/api/"):
@@ -216,6 +242,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if not _check_token(self.ctx, self):
                 self._send_error_json("token 校验失败", 401)
+                return
+            denied = _gate(self.ctx, path, "GET")
+            if denied:
+                self._send_error_json(denied, 404)
                 return
 
             if path == "/api/state":
@@ -287,6 +317,10 @@ class Handler(BaseHTTPRequestHandler):
             if not _check_token(self.ctx, self):
                 self._send_error_json("token 校验失败", 401)
                 return
+            denied = _gate(self.ctx, path, "POST")
+            if denied:
+                self._send_error_json(denied, 404)
+                return
 
             m = re.match(r"^/api/upload/([^/]+)/ztar$", path)
             if m:
@@ -344,7 +378,7 @@ class Handler(BaseHTTPRequestHandler):
         # 连通性由设置页「测试连接」(/api/remote/list) 显式检查
         self._send_json({
             "ok": True,
-            "version": "0.3.0",
+            "version": "0.4.0",
             "mode": ctx.mode,
             "server": {
                 "port": ctx.port,
@@ -793,20 +827,20 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"ok": True, "packages": out})
 
     def _send_tool_zip(self):
+        """引导包: 共享核心 + web 资产 + 客户端入口 + 启动器, 保持仓库相对布局。"""
         root = self.ctx.tool_root
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            for sub in ("zsync", "web"):
+            for sub in ("zsync", "web", "client"):
                 d = os.path.join(root, sub)
                 for froot, _d, files in os.walk(d):
                     if "__pycache__" in froot:
                         continue
                     for f in files:
+                        if f.endswith((".pyc", ".spec")) or f == "build_exe.cmd":
+                            continue
                         full = os.path.join(froot, f)
                         zf.write(full, os.path.relpath(full, root))
-            entry = os.path.join(root, "zsync.py")
-            if os.path.isfile(entry):
-                zf.write(entry, "zsync.py")
             for launcher in ("start-agent.cmd", "start-agent.sh"):
                 p = os.path.join(root, launcher)
                 if os.path.isfile(p):
@@ -859,9 +893,10 @@ def _hostname() -> str:
 
 
 def serve(port: int | None = None, bind: str | None = None, store_dir: str | None = None,
-          token: str | None = None, mode: str = "node") -> None:
-    """mode: node=完整节点(默认 0.0.0.0:8642); agent=客户端本机代理(默认 127.0.0.1:8643,
-    供中央服务器页面经浏览器跨源调用, 读写本机 zcode 目录)。"""
+          token: str | None = None, mode: str = "server") -> None:
+    """mode: server=中央服务器(默认 0.0.0.0:8642, 接收推送/拉取+Web GUI);
+    agent=客户端本机代理(默认 127.0.0.1:8643, 读写本机 zcode 目录,
+    供中央服务器页面经浏览器跨源调用, 亦为桌面 GUI 的同源后端)。"""
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     store_dir = store_dir or os.path.join(root, "data")
     if port is None:
@@ -879,7 +914,7 @@ def serve(port: int | None = None, bind: str | None = None, store_dir: str | Non
     for ip in _lan_ips():
         ctx.log(f"  局域网访问: http://{ip}:{port}")
     if mode == "agent":
-        ctx.log("  agent 模式: 仅供本机浏览器跨源访问中央服务器页面使用")
+        ctx.log("  agent 模式: 供本机浏览器跨源访问中央服务器页面 / 桌面 GUI 同源调用")
     elif not token:
         ctx.log("  警告: 未设置 token, 局域网内任何机器都可访问(开发模式)")
     try:

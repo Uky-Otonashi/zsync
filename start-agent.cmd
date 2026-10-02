@@ -5,8 +5,8 @@ rem Windows), and any non-ASCII bytes get mis-split into bogus commands.
 cd /d "%~dp0"
 where python >nul 2>nul
 if errorlevel 1 (
-  echo [zsync] python not found. Install Python 3.10+ first, or use the embedded runtime.
+  echo [zsync] python not found. Install Python 3.10+ first, or use the desktop client exe.
   pause
   exit /b 1
 )
-start "zsync-agent" /min python zsync.py serve --agent %*
+start "zsync-agent" /min python "%~dp0client\zsync-client.py" agent %*

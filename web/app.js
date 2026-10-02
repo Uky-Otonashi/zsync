@@ -77,9 +77,9 @@ const I18N = {
     "guide.title": "首次接入 —— 在本机启动客户端 agent",
     "guide.intro": "本页面由中央服务器提供, 读取本机 zcode 项目需要在本机运行一个轻量 agent(纯 Python 标准库, 无需安装任何依赖):",
     "guide.s1": "下载工具包", "guide.s2": "解压到任意目录(如 C:\\zsync)",
-    "guide.s3": "双击 start-agent.cmd(Windows), 或运行 python zsync.py serve --agent(Linux/macOS)",
+    "guide.s3": "双击 start-agent.cmd(Windows), 或运行 python client/zsync-client.py agent(Linux/macOS)",
     "guide.s4": "回到本页点击「重新检测」—— 首次将引导确认本机 zcode 目录(默认 ~/.zcode 自动探测), 之后自动加载本机项目清单",
-    "guide.tip": "Windows 下请始终通过 start-agent.cmd 或带 python 前缀运行, 不要直接敲 zsync.py serve --agent —— 若 .py 关联的是编辑器(如 VS Code), 会弹出编辑器而不是运行 agent。agent 只监听 127.0.0.1:8643, 不对局域网开放; 浏览器若弹出「允许访问本地网络」请选择允许。开机自启: 把 start-agent.cmd 的快捷方式放入 shell:startup。",
+    "guide.tip": "Windows 下请始终通过 start-agent.cmd 或带 python 前缀运行, 不要直接敲 zsync-client.py agent —— 若 .py 关联的是编辑器(如 VS Code), 会弹出编辑器而不是运行 agent。agent 只监听 127.0.0.1:8643, 不对局域网开放; 浏览器若弹出「允许访问本地网络」请选择允许。也可改用桌面客户端(zsync-client.exe): 启动即自动拉起 agent, 关闭即停止。",
     "guide.redetect": "重新检测本机 agent", "tip.label": "提示",
     "remote.title": "服务器仓库", "remote.sub": "浏览中央服务器或本机存档库中的备份, 拉取恢复到任意机器",
     "remote.source": "仓库来源", "remote.srcServer": "服务器仓库", "remote.srcAgent": "本机存档库 (agent)",
@@ -182,9 +182,9 @@ const I18N = {
     "guide.title": "First-time setup — start the local agent",
     "guide.intro": "This page is served by the central server. Reading local zcode projects requires a lightweight agent on this machine (pure Python stdlib, no dependencies):",
     "guide.s1": "Download the tool package", "guide.s2": "Extract to any directory (e.g. C:\\zsync)",
-    "guide.s3": "Double-click start-agent.cmd (Windows), or run python zsync.py serve --agent (Linux/macOS)",
+    "guide.s3": "Double-click start-agent.cmd (Windows), or run python client/zsync-client.py agent (Linux/macOS)",
     "guide.s4": "Back on this page click “Redetect” — first run guides you to confirm the local zcode directory, then loads the project list",
-    "guide.tip": "On Windows always launch via start-agent.cmd or with a python prefix; a bare zsync.py may open an editor if .py is associated with one. The agent only listens on 127.0.0.1:8643. Allow “local network access” if the browser asks. For autostart, put a shortcut of start-agent.cmd into shell:startup.",
+    "guide.tip": "On Windows always launch via start-agent.cmd or with a python prefix; a bare zsync-client.py may open an editor if .py is associated with one. The agent only listens on 127.0.0.1:8643. Allow “local network access” if the browser asks. Or use the desktop client (zsync-client.exe): it starts the agent on launch and stops it on exit.",
     "guide.redetect": "Redetect local agent", "tip.label": "Tip",
     "remote.title": "Server Repository", "remote.sub": "Browse backups on the central server or local archive store, pull & restore to any machine",
     "remote.source": "Source", "remote.srcServer": "Server repository", "remote.srcAgent": "Local store (agent)",
@@ -257,7 +257,7 @@ document.querySelectorAll(`input[name="lang"][value="${LANG}"]`).forEach(r => r.
 applyI18n();
 
 const SERVER = window.location.origin;   // 中央服务器(即提供本页面的服务器)
-const AGENT_PORTS = [8643, 8642];        // 本机 agent 探测候选(后者兼容本机跑完整节点)
+const AGENT_PORTS = [8643];              // 本机客户端 agent 探测端口
 
 let STATE = null;      // 服务器 /api/state
 let AGENT = null;      // {base, state} —— base 为 "" 表示即本源(旧单机模式)
@@ -372,13 +372,14 @@ async function detectAgent() {
     if (base === self) continue;
     try {
       const j = await fetchJSON(base + "/api/state", {}, 4000);
-      if (j && j.ok && (j.mode === "agent" || j.mode === "node")) {
+      if (j && j.ok && j.mode === "agent") {
         return { base, state: j, kind: j.mode };
       }
     } catch (e) { /* 端口无响应, 继续探测 */ }
   }
-  // 旧单机模式: 经 loopback 直接访问完整节点, 节点即本机
-  if (loopback && STATE && STATE.mode === "node") {
+  // 页面由 agent 自身伺服(桌面客户端/本机直开) → 本源即客户端;
+  // 旧单机节点(mode=node)经 loopback 访问时亦以自身为客户端
+  if (loopback && STATE && (STATE.mode === "agent" || STATE.mode === "node")) {
     return { base: "", state: STATE, kind: "self" };
   }
   return null;

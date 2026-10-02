@@ -75,10 +75,10 @@
     <ol class="steps">
       <li data-i18n="guide.s1">下载工具包 <code class="code-chip" id="guide-tool-url"></code></li>
       <li data-i18n="guide.s2">解压到任意目录(如 <code>C:\zsync</code>)</li>
-      <li data-i18n="guide.s3">双击 <code>start-agent.cmd</code>(Windows), 或运行 <code>python zsync.py serve --agent</code>(Linux/macOS)</li>
+      <li data-i18n="guide.s3">双击 <code>start-agent.cmd</code>(Windows), 或运行 <code>python client/zsync-client.py agent</code>(Linux/macOS)</li>
       <li data-i18n="guide.s4">回到本页点击「重新检测」—— 首次将引导确认本机 zcode 目录(默认 <code>~/.zcode</code> 自动探测), 之后自动加载本机项目清单</li>
     </ol>
-    <p class="hint tip"><b data-i18n="tip.label">提示</b> <span data-i18n="guide.tip">Windows 下请始终通过 start-agent.cmd 或带 python 前缀运行, 不要直接敲 zsync.py serve --agent —— 若 .py 关联的是编辑器(如 VS Code), 会弹出编辑器而不是运行 agent。agent 只监听 127.0.0.1:8643, 不对局域网开放; 浏览器若弹出「允许访问本地网络」请选择允许。开机自启: 把 start-agent.cmd 的快捷方式放入 shell:startup。</span></p>
+    <p class="hint tip"><b data-i18n="tip.label">提示</b> <span data-i18n="guide.tip">Windows 下请始终通过 start-agent.cmd 或带 python 前缀运行, 不要直接敲 zsync-client.py agent —— 若 .py 关联的是编辑器(如 VS Code), 会弹出编辑器而不是运行 agent。agent 只监听 127.0.0.1:8643, 不对局域网开放; 浏览器若弹出「允许访问本地网络」请选择允许。也可改用桌面客户端(zsync-client.exe): 启动即自动拉起 agent, 关闭即停止。</span></p>
     <div class="row">
       <button id="btn-redetect" class="primary" data-i18n="guide.redetect">重新检测本机 agent</button>
     </div>
