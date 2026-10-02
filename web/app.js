@@ -42,6 +42,14 @@ const I18N = {
     "ac.noOutput": "(无输出)",
     "fold.reasoning": "◈ 思考过程", "fold.in": "输入", "fold.out": "输出", "fold.attach": "🖼 附件",
     "fold.noText": "(无文本内容)", "fold.step": (n) => `⟡ 步骤标记${n > 1 ? ` ×${n}` : ""}`,
+    // zcode 风格 工具/思考行
+    "tc.thought": "思考", "tc.thoughtDur": (s) => `持续了 ${s} 秒`, "tc.turn": (d) => `用时 ${d}`,
+    "tc.read": "读取", "tc.write": "写入", "tc.edit": "编辑", "tc.bash": "终端", "tc.grep": "搜索",
+    "tc.glob": "匹配", "tc.todo": "待办", "tc.web": "网页", "tc.skill": "技能", "tc.tool": "工具",
+    "tc.msg": "消息", "tc.st.failed": "执行失败", "tc.st.unfilled": "未回填",
+    "tc.params": "参数", "tc.result": "结果", "tc.output": "输出", "tc.noOutput": "没有输出。",
+    "tc.truncOut": "…(内容过长已截断)",
+    "d.colName": "名称", "d.colCnt": "项数", "d.colSize": "大小",
     "msg.total": (n, all) => `共 ${n} 条消息${all ? "(已全部加载)" : ""}`,
     "msg.earlier": (n) => `↑ 加载更早的消息(还有 ${n} 条未显示)`,
     "msg.children": (n) => `子会话 ${n} 个(点击分屏对照):`,
@@ -75,6 +83,8 @@ const I18N = {
     "guide.redetect": "重新检测本机 agent", "tip.label": "提示",
     "remote.title": "服务器仓库", "remote.sub": "浏览中央服务器或本机存档库中的备份, 拉取恢复到任意机器",
     "remote.source": "仓库来源", "remote.srcServer": "服务器仓库", "remote.srcAgent": "本机存档库 (agent)",
+    "remote.filterPh": "筛选存档 — 名称或路径…",
+    "remote.noMatch": (q) => `没有匹配「${q}」的存档`,
     "restore.title": "拉取恢复 ·", "restore.target": "恢复到本机路径",
     "restore.remapHint": "路径与原机器不同时自动重映射 project_id / 目录 / 记忆 slug / 会话列表索引",
     "restore.warn": "恢复会写入本机 zcode 数据库(", "restore.warn2": "), 执行前请完全退出 zcode",
@@ -137,6 +147,14 @@ const I18N = {
     "ac.noOutput": "(no output)",
     "fold.reasoning": "◈ Reasoning", "fold.in": "Input", "fold.out": "Output", "fold.attach": "🖼 Attachment",
     "fold.noText": "(no text content)", "fold.step": (n) => `⟡ step mark${n > 1 ? ` ×${n}` : ""}`,
+    // zcode-style tool / reasoning rows
+    "tc.thought": "Thought", "tc.thoughtDur": (s) => `took ${s}s`, "tc.turn": (d) => `${d}`,
+    "tc.read": "Read", "tc.write": "Write", "tc.edit": "Edit", "tc.bash": "Terminal", "tc.grep": "Search",
+    "tc.glob": "Match", "tc.todo": "Todo", "tc.web": "Web", "tc.skill": "Skill", "tc.tool": "Tool",
+    "tc.msg": "Message", "tc.st.failed": "Failed", "tc.st.unfilled": "unfilled",
+    "tc.params": "Parameters", "tc.result": "Result", "tc.output": "Output", "tc.noOutput": "No output.",
+    "tc.truncOut": "…(truncated)",
+    "d.colName": "Name", "d.colCnt": "Items", "d.colSize": "Size",
     "msg.total": (n, all) => `${n} messages${all ? " (all loaded)" : ""}`,
     "msg.earlier": (n) => `↑ Load earlier messages (${n} more)`,
     "msg.children": (n) => `Sub-sessions: ${n} (click for split view):`,
@@ -170,6 +188,8 @@ const I18N = {
     "guide.redetect": "Redetect local agent", "tip.label": "Tip",
     "remote.title": "Server Repository", "remote.sub": "Browse backups on the central server or local archive store, pull & restore to any machine",
     "remote.source": "Source", "remote.srcServer": "Server repository", "remote.srcAgent": "Local store (agent)",
+    "remote.filterPh": "Filter archives — name or path…",
+    "remote.noMatch": (q) => `No archives matching "${q}"`,
     "restore.title": "Pull & restore ·", "restore.target": "Restore to local path",
     "restore.remapHint": "Paths differing from the origin machine are auto-remapped (project_id / directories / memory slug / tasks index)",
     "restore.warn": "Restoring writes into the local zcode database (", "restore.warn2": "). Fully exit zcode before running.",
@@ -253,6 +273,24 @@ const ICO_DIR = '<svg class="ft-ico" viewBox="0 0 16 16" width="15" height="15" 
 const ICO_FILE = '<svg class="ft-ico file" viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M4 1.8h5.2L13 5.5v8.7H4V1.8z"/><path d="M9.2 1.8v3.7H13"/></svg>';
 const ICO_EMPTY = '<svg viewBox="0 0 48 48" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="6" width="26" height="36" rx="2.5"/><path d="M14 15h13M14 21h13M14 27h9" opacity=".55"/><path d="M33 33l8.5-8.5 3.5 3.5-8.5 8.5H33V33z"/></svg>';
 
+/* zcode 同款 lucide 图标(会话流 工具/思考 行) */
+const lucide = (w, paths) =>
+  `<svg viewBox="0 0 24 24" width="${w}" height="${w}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+const ICO_L_SEARCH = lucide(14, '<path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/>');
+const ICO_L_TERM = lucide(14, '<path d="m7 11 2-2-2-2"/><path d="M11 13h4"/><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>');
+const ICO_L_PEN = lucide(14, '<path d="M13 21h8"/><path d="m15 5 4 4"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>');
+const ICO_L_FILEPEN = lucide(14, '<path d="M14.364 13.634a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506l4.013-4.009a1 1 0 0 0-3.004-3.004z"/><path d="M14.487 7.858A1 1 0 0 1 14 7V2"/><path d="M20 19.645V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l2.516 2.516"/><path d="M8 18h1"/>');
+const ICO_L_BRAIN = lucide(14, '<path d="M12 18V5"/><path d="M15 13a4.17 4.17 0 0 1-3-4 4.17 4.17 0 0 1-3 4"/><path d="M17.598 6.5A3 3 0 1 0 12 5a3 3 0 1 0-5.598 1.5"/><path d="M17.997 5.125a4 4 0 0 1 2.526 5.77"/><path d="M18 18a4 4 0 0 0 2-7.464"/><path d="M19.967 17.483A4 4 0 1 1 12 18a4 4 0 1 1-7.967-.517"/><path d="M6 18a4 4 0 0 1-2-7.464"/><path d="M6.003 5.125a4 4 0 0 0-2.526 5.77"/>');
+const ICO_L_TODO = lucide(14, '<path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><rect x="3" y="4" width="6" height="6" rx="1"/>');
+const ICO_L_GLOBE = lucide(14, '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>');
+const ICO_L_WRENCH = lucide(14, '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.106-3.105c.32-.322.863-.22.983.218a6 6 0 0 1-8.259 7.057l-7.91 7.91a1 1 0 0 1-2.999-3l7.91-7.91a6 6 0 0 1 7.057-8.259c.438.12.54.662.219.984z"/>');
+const ICO_L_TXTSEARCH = lucide(14, '<path d="M21 5H3"/><path d="M10 12H3"/><path d="M10 19H3"/><circle cx="17" cy="15" r="3"/><path d="m21 19-1.9-1.9"/>');
+const ICO_L_ZAP = lucide(14, '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>');
+const ICO_L_MSG = lucide(14, '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>');
+const ICO_L_BOT = lucide(15, '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>');
+const ICO_L_CHECK = lucide(15, '<path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/>');
+const ICO_L_CHEV = lucide(14, '<path d="m9 18 6-6-6-6"/>');
+
 function emptyBox(text) {
   return `<div class="empty">${ICO_EMPTY}<p>${text}</p></div>`;
 }
@@ -283,6 +321,16 @@ function fmtTime(ms) {
   if (!ms) return "-";
   const d = new Date(ms);
   return `${d.getMonth() + 1}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+/* 毫秒 → 紧凑时长(工具行/本轮用时): 3.2s / 42s / 1m03s / 2h05m */
+function fmtDur(ms) {
+  if (ms == null || ms < 0) return "";
+  const s = ms / 1000;
+  if (s < 10) return s.toFixed(1) + "s";
+  if (s < 60) return Math.round(s) + "s";
+  const m = Math.floor(s / 60), rs = Math.round(s % 60);
+  if (m < 60) return `${m}m${String(rs).padStart(2, "0")}s`;
+  return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}m`;
 }
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -623,6 +671,7 @@ async function openDetail(p) {
   dtState.tree = {};
   dtState.sess.openSet = new Set();
   $("#dt-back").style.display = "none";
+  $("#dt-body").classList.remove("sess");
   $("#dt-name").textContent = p.name;
   $("#dt-sub").textContent = p.path || p.project_id;
   $("#detail").classList.remove("hidden");
@@ -642,6 +691,7 @@ function renderDetailProject() {
   closeSplit();
   dtState.view = "project";
   $("#dt-back").style.display = "none";
+  $("#dt-body").classList.remove("sess");
   const p = r.project;
   $("#dt-name").textContent = p.name;
   $("#dt-name").title = p.project_id;
@@ -809,6 +859,14 @@ function renderTree() {
       if (row) drillInto(row.dataset.rel);
     });
   }
+  // 列头(名称/项数/大小)
+  const headHtml = `
+    <div class="ft-head">
+      <span class="fh-tw"></span><span class="fh-ico"></span>
+      <span class="fh-name">${t("d.colName")}</span>
+      <span class="fh-cnt">${t("d.colCnt")}</span>
+      <span class="fh-sz">${t("d.colSize")}</span>
+    </div>`;
   const focus = dtState.fsFocus;
   if (focus) {
     // 下钻视图: 面包屑 + 该目录直接内容(其内箭头仍可原地树形展开)
@@ -818,25 +876,27 @@ function renderTree() {
         <span class="crumb" data-drill="">${esc(dtState.project?.project?.name || t("d.root"))}</span>
         ${parts.map((s, i) => `<span class="crumb-sep">/</span><span class="crumb${i === parts.length - 1 ? " cur" : ""}" data-drill="${esc(parts.slice(0, i + 1).join("/"))}">${esc(s)}</span>`).join("")}
       </div>
+      ${headHtml}
       ${fsLevelHtml(focus, 0)}`;
   } else {
     const root = dtState.tree[""] || {};
     const rootName = dtState.project?.project?.path || t("d.rootName");
     box.innerHTML = `
+      ${headHtml}
       <div class="ft-row dt-dir root" data-rel="" style="--depth:0">
         <span class="tw">${root.open ? "▾" : "▸"}</span>${ICO_DIR}
         <span class="ft-name">${esc(rootName)}</span>
-        <span class="ft-meta"><span class="ft-cnt"></span><span class="ft-sz">${root.open ? "" : t("d.collapsed")}</span></span>
+        <span class="ft-meta"><span class="ft-cnt"></span><span class="ft-sz">${root.loaded ? (root.open ? "" : t("d.collapsed")) : ""}</span></span>
       </div>
       ${root.open ? fsLevelHtml("", 1) : ""}`;
   }
 }
 
 async function renderDetailFs() {
-  dtState.tree = { "": { loaded: false, open: true, loading: false, entries: [] } };
+  // 默认收起(用户一般不需要在此浏览文件清单, 给下方会话列表腾位置), 点开时再加载
+  dtState.tree = { "": { loaded: false, open: false, loading: false, entries: [] } };
   dtState.fsFocus = null;
   renderTree();
-  await toggleTreeNode("");
 }
 
 function renderDetailSessions(sessions) {
@@ -976,26 +1036,29 @@ function renderSession(r) {
   $("#dt-name").textContent = s.title || s.id;
   $("#dt-name").title = s.title || s.id;
   $("#dt-sub").textContent = `${s.directory || ""}`;
+  $("#dt-body").classList.add("sess");
   $("#dt-body").innerHTML = `
     <div id="dt-main-col" class="dt-col">
-      <div class="dt-ssinfo">
-        ${s.task_type === "subagent_child"
-          ? '<span class="badge sub">子代理会话</span>'
-          : `<span class="badge on">${esc(s.task_type || "interactive")}</span>`}
-        <span class="hint">${t("sv.created", fmtTime(s.time_created))} · ${t("sv.updated", fmtTime(s.time_updated))}</span>
-        <span class="hint">CLI ${esc(s.version || "?")} · <b>${t("msg.total", r.total_messages, !r.has_more)}</b></span>
-        <span class="spacer"></span>
-        <div class="seg mini" id="dt-sview">
-          <button class="${dtState.sview === "chat" ? "active" : ""}" data-sv="chat">${t("sv.chat")}</button>
-          <button class="${dtState.sview === "trace" ? "active" : ""}" data-sv="trace">${t("sv.trace")}</button>
-          <button class="${dtState.sview === "system" ? "active" : ""}" data-sv="system">${t("sv.system")}</button>
+      <div class="dt-sess-head">
+        <div class="dt-ssinfo">
+          ${s.task_type === "subagent_child"
+            ? '<span class="badge sub">子代理会话</span>'
+            : `<span class="badge on">${esc(s.task_type || "interactive")}</span>`}
+          <span class="hint">${t("sv.created", fmtTime(s.time_created))} · ${t("sv.updated", fmtTime(s.time_updated))}</span>
+          <span class="hint">CLI ${esc(s.version || "?")} · <b>${t("msg.total", r.total_messages, !r.has_more)}</b></span>
+          <span class="spacer"></span>
+          <div id="dt-sview">
+            <button class="${dtState.sview === "chat" ? "active" : ""}" data-sv="chat">${t("sv.chat")}</button>
+            <button class="${dtState.sview === "trace" ? "active" : ""}" data-sv="trace">${t("sv.trace")}</button>
+            <button class="${dtState.sview === "system" ? "active" : ""}" data-sv="system">${t("sv.system")}</button>
+          </div>
         </div>
+        ${(r.children || []).length ? `
+        <div class="dt-children">
+          <span class="hint">${t("msg.children", r.children.length)}</span>
+          ${r.children.map(c => `<span class="badge sub dt-child" data-sid="${esc(c.id)}" data-call="${esc(c.agent_call?.callID || "")}" title="${esc(c.directory || "")} · ${fmtTime(c.time_updated)}">${esc((c.title || c.id).slice(0, 34))}</span>`).join("")}
+        </div>` : ""}
       </div>
-      ${(r.children || []).length ? `
-      <div class="dt-children">
-        <span class="hint">${t("msg.children", r.children.length)}</span>
-        ${r.children.map(c => `<span class="badge sub dt-child" data-sid="${esc(c.id)}" data-call="${esc(c.agent_call?.callID || "")}" title="${esc(c.directory || "")} · ${fmtTime(c.time_updated)}">${esc((c.title || c.id).slice(0, 34))}</span>`).join("")}
-      </div>` : ""}
       <div id="dt-sview-body"></div>
     </div>`;
   document.querySelectorAll("#dt-sview button").forEach(b =>
@@ -1249,6 +1312,115 @@ function roleOf(m) {
 
 const CONTENT_PART_TYPES = new Set(["text", "reasoning", "tool", "agent", "file"]);
 
+/* ---------------- zcode 风格 工具/思考行 ----------------
+   收起 = 单行摘要[图标|类别|对象|目录|· 耗时|状态|▸], 展开 = 圆角面板(参数/结果)。
+   图标与文案对齐 zcode(packages/ui ToolCallBlocks + i18n chat.toolCall.*)。 */
+const TOOL_META = {
+  Read: { icon: ICO_L_SEARCH, label: "tc.read" },
+  Bash: { icon: ICO_L_TERM, label: "tc.bash" },
+  Edit: { icon: ICO_L_PEN, label: "tc.edit" },
+  MultiEdit: { icon: ICO_L_PEN, label: "tc.edit" },
+  NotebookEdit: { icon: ICO_L_PEN, label: "tc.edit" },
+  Write: { icon: ICO_L_FILEPEN, label: "tc.write" },
+  Grep: { icon: ICO_L_TXTSEARCH, label: "tc.grep" },
+  Glob: { icon: ICO_L_SEARCH, label: "tc.glob" },
+  TodoWrite: { icon: ICO_L_TODO, label: "tc.todo" },
+  WebSearch: { icon: ICO_L_GLOBE, label: "tc.web" },
+  WebFetch: { icon: ICO_L_GLOBE, label: "tc.web" },
+  Skill: { icon: ICO_L_ZAP, label: "tc.skill" },
+  SendMessage: { icon: ICO_L_MSG, label: "tc.msg" },
+};
+
+function toolInputObj(p) {
+  try { return JSON.parse(p.input || "null") || {}; } catch (e) { return {}; }
+}
+
+/* 从工具入参提取 摘要主文本(文件名/命令/查询词) 与 次文本(所在目录) */
+function toolSummary(p) {
+  const tool = p.tool || "";
+  const meta = TOOL_META[tool] || { icon: ICO_L_WRENCH, label: "tc.tool" };
+  const inp = toolInputObj(p);
+  let primary = "", isCmd = false, dir = "";
+  if (tool === "Bash") {
+    let cmd = inp.command ?? inp.cmd ?? inp.script ?? inp.exec ?? "";
+    if (Array.isArray(cmd)) cmd = cmd.join(" ");
+    primary = String(cmd).replace(/\s+/g, " ").trim();
+    isCmd = true;
+  } else if (["Read", "Edit", "MultiEdit", "Write", "NotebookEdit"].includes(tool)) {
+    const fp = String(inp.file_path || inp.filePath || inp.path || "");
+    primary = fp ? fp.split(/[\\/]/).pop() : "";
+    dir = fp.slice(0, fp.length - primary.length).replace(/[\\/]$/, "");
+  } else if (tool === "Grep" || tool === "Glob") {
+    primary = inp.pattern || inp.query || "";
+  } else if (tool === "WebSearch") {
+    primary = inp.query || "";
+  } else if (tool === "WebFetch") {
+    primary = inp.url || "";
+  } else if (tool === "Skill") {
+    primary = inp.skill || "";
+  } else if (tool === "TodoWrite") {
+    primary = "";
+  } else {
+    primary = tool; // 未知/MCP 工具: 至少亮出名字
+  }
+  return { meta, primary, isCmd, dir };
+}
+
+function reasoningRow(p) {
+  const durMs = Number.isFinite(p.t0) && Number.isFinite(p.t1) ? p.t1 - p.t0 : null;
+  return `
+  <details class="tc reasoning">
+    <summary>
+      <span class="tc-ico">${ICO_L_BRAIN}</span>
+      <span class="tc-label">${t("tc.thought")}</span>
+      ${durMs != null ? `<span class="tc-dur">· ${t("tc.thoughtDur", Math.max(1, Math.round(durMs / 1000)))}</span>` : ""}
+      <span class="tc-chv">${ICO_L_CHEV}</span>
+    </summary>
+    <div class="tc-body"><div class="tc-panel"><pre>${esc(p.text)}${p.truncated ? t("tc.truncOut") : ""}</pre></div></div>
+  </details>`;
+}
+
+function toolRow(p) {
+  const { meta, primary, isCmd, dir } = toolSummary(p);
+  const durMs = Number.isFinite(p.t0) && Number.isFinite(p.t1) ? p.t1 - p.t0 : null;
+  const failed = p.status === "error" || p.status === "failed";
+  const unfilled = !failed && p.status !== "completed";
+  const stHtml = failed
+    ? `<span class="tc-st fail" title="${esc((p.output || "").split("\n")[0].slice(0, 200))}">${t("tc.st.failed")}</span>`
+    : unfilled ? `<span class="tc-st unfilled">${t("tc.st.unfilled")}</span>` : "";
+  const mainHtml = primary
+    ? `<span class="tc-main"${!isCmd && dir ? ` title="${esc(dir + "/" + primary)}"` : ""}>` +
+      (isCmd ? `<span class="tc-cmdline">${esc(primary)}</span>` : esc(primary)) + `</span>`
+    : "";
+  // 展开面板: Bash = $命令 + 输出; 其余 = 参数 + 结果
+  const inp = toolInputObj(p);
+  let prettyIn = p.input || "";
+  try { prettyIn = JSON.stringify(inp, null, 2); } catch (e) { /* 保留原文 */ }
+  const isBash = p.tool === "Bash";
+  let cmdRaw = isBash ? (inp.command ?? inp.cmd ?? inp.script ?? inp.exec ?? "") : "";
+  if (Array.isArray(cmdRaw)) cmdRaw = cmdRaw.join(" ");
+  const cmdFull = String(cmdRaw);
+  const outPre = esc(p.output || (failed ? "" : t("tc.noOutput")));
+  const bodyHtml = isBash
+    ? `<div class="tc-cmd"><span class="tc-dollar">$</span><div>${esc(cmdFull)}</div></div>
+       <div class="tc-lbl">${t("tc.output")}</div><pre>${outPre}</pre>`
+    : `<div class="tc-lbl">${t("tc.params")}</div><pre>${esc(prettyIn)}</pre>
+       <div class="tc-lbl">${t("tc.result")}</div><pre>${outPre}</pre>`;
+  return `
+  <details class="tc tool">
+    <summary>
+      <span class="tc-ico">${meta.icon}</span>
+      <span class="tc-label">${t(meta.label)}</span>
+      ${mainHtml}
+      ${!isCmd && dir ? `<span class="tc-sub">${esc(dir)}</span>` : ""}
+      ${durMs != null ? `<span class="tc-dur">· ${fmtDur(durMs)}</span>` : ""}
+      ${stHtml}
+      <span class="tc-chv">${ICO_L_CHEV}</span>
+    </summary>
+    <div class="tc-body"><div class="tc-panel">${bodyHtml}${p.truncated ? `<div class="tc-trunc">${t("tc.truncOut")}</div>` : ""}</div></div>
+  </details>`;
+}
+
 function agentLaunchCard(p) {
   const child = dtState.childByCall?.get(p.callID);
   const st = p.status === "completed" ? `<span class="badge on">${t("ac.done")}</span>`
@@ -1257,7 +1429,7 @@ function agentLaunchCard(p) {
   return `
   <div class="agent-card launch" id="ac-${esc(p.callID || "")}">
     <div class="ac-head">
-      <span class="ac-ico">🤖</span>
+      <span class="ac-ico">${ICO_L_BOT}</span>
       <span class="ac-title">${t("ac.launch")}${p.subagent_type ? ` · ${esc(p.subagent_type)}` : ""}</span>
       ${st}
       ${p.description ? `<span class="hint ac-desc">${esc(p.description)}</span>` : ""}
@@ -1272,7 +1444,7 @@ function agentReturnCard(p) {
   return `
   <div class="agent-card ret">
     <div class="ac-head">
-      <span class="ac-ico">✅</span>
+      <span class="ac-ico">${ICO_L_CHECK}</span>
       <span class="ac-title">${t("ac.ret")}${p.description ? ` · ${esc(p.description)}` : ""}</span>
       ${child ? `<button class="ghost mini" data-split="${esc(child.id)}" data-call="${esc(p.callID)}">↗ 分屏查看</button>` : ""}
     </div>
@@ -1294,27 +1466,32 @@ function renderMsg(m) {
       return `<div class="mp-text">${esc(p.text)}${p.truncated ? '<div class="hint">…(内容过长已截断)</div>' : ""}</div>`;
     }
     if (p.type === "reasoning") {
-      return `<details class="mp-fold reasoning"><summary>${t("fold.reasoning")}</summary><pre>${esc(p.text)}</pre></details>`;
+      return reasoningRow(p);
     }
     if (p.type === "agent") {
       return agentLaunchCard(p);
     }
     if (p.type === "tool") {
-      const ok = p.status === "completed";
-      return `<details class="mp-fold tool"><summary>⚙ ${esc(p.tool || "?")} ${ok ? "✓" : esc(p.status || "…")}</summary>
-        <div class="mp-io"><div class="mp-lbl">${t("fold.in")}</div><pre>${esc(p.input)}</pre>
-        <div class="mp-lbl">${t("fold.out")}</div><pre>${esc(p.output)}${p.truncated ? "\n…(已截断)" : ""}</pre></div></details>`;
+      return toolRow(p);
     }
     if (p.type === "file") {
       return `<div class="mp-file">${t("fold.attach")} ${esc(p.mime || "")}</div>`;
     }
     return "";
   }).join("");
+  // 本轮用时 = 助手消息全部 part 的起止时间跨度
+  let turnDur = null;
+  if (role.key === "assistant") {
+    const t0s = parts.map(p => p.t0).filter(v => Number.isFinite(v));
+    const t1s = parts.map(p => (p.t1 != null ? p.t1 : p.t0)).filter(v => Number.isFinite(v));
+    if (t0s.length && t1s.length) turnDur = Math.max(...t1s) - Math.min(...t0s);
+  }
   return `
   <div class="msg ${role.key}" data-mid="${esc(m.id)}">
     <div class="msg-head">
       <span class="msg-role">${esc(role.label)}</span>
       ${role.key === "assistant" && m.model ? `<span class="hint mono">${esc(m.model)}</span>` : ""}
+      ${turnDur != null && turnDur >= 2000 ? `<span class="msg-dur">${t("tc.turn", fmtDur(turnDur))}</span>` : ""}
       ${m.error ? `<span class="badge live" title="${esc(m.error)}">出错</span>` : ""}
     </div>
     ${partsHtml || `<div class="hint">${t("fold.noText")}</div>`}
@@ -1368,11 +1545,21 @@ function renderRepo() {
     box.innerHTML = emptyBox("仓库中暂无存档<br>在「项目备份」页备份本机项目即可上传");
     return;
   }
-  box.innerHTML = REPO_ARCHIVES.map(a => {
+  const q = ($("#repo-filter")?.value || "").trim().toLowerCase();
+  const list = q ? REPO_ARCHIVES.filter(a => {
+    const src = a.source || {};
+    return [a.archive_id, src.project_path, src.hostname, a.label]
+      .some(v => String(v || "").toLowerCase().includes(q));
+  }) : REPO_ARCHIVES;
+  if (!list.length) {
+    box.innerHTML = `<div class="hint" style="padding:14px 4px">${t("remote.noMatch", $("#repo-filter").value.trim())}</div>`;
+    return;
+  }
+  box.innerHTML = list.map(a => {
     const src = a.source || {};
     const comps = a.components || {};
     const badges = COMP_DEFS.filter(c => comps[c.key]).map(c => `<span class="badge on">${t("comp." + c.key + ".l")}</span>`).join("");
-    return `<div class="repo-item" data-aid="${esc(a.archive_id)}">
+    return `<div class="repo-item${SELECTED?.id === a.archive_id ? " selected" : ""}" data-aid="${esc(a.archive_id)}">
       <div class="ri-main">
         <div class="ri-name" title="${esc(a.archive_id)}">${esc(a.archive_id)}</div>
         <div class="ri-meta">${esc(src.project_path || "")} · ${esc(src.hostname || "")} · ${fmtTime(a.updated_at)}</div>
@@ -1415,6 +1602,7 @@ function rcompCb(c, comps) {
 
 $$('input[name="rsrc"]').forEach(r => r.addEventListener("change", loadRepo));
 $("#btn-load-repo").addEventListener("click", loadRepo);
+$("#repo-filter").addEventListener("input", renderRepo);
 
 $("#btn-restore").addEventListener("click", async () => {
   if (!SELECTED) return;

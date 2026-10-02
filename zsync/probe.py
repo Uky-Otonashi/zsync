@@ -167,16 +167,26 @@ def project_sessions(layout: zclayout.ZcodeLayout, project_id: str) -> list[dict
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+def _part_span(d: dict, st: dict | None = None) -> tuple[int | None, int | None]:
+    """part 起止毫秒时间戳: tool 在 state.time, 其余在顶层 time; 运行中缺 end。"""
+    tm = (st or {}).get("time") if st is not None else d.get("time")
+    tm = tm or {}
+    return tm.get("start"), tm.get("end")
+
+
 def _part_view(d: dict) -> dict | None:
     t = d.get("type")
     if t == "text":
         txt, trunc = _truncate(d.get("text") or "", TEXT_LIMIT)
-        return {"type": "text", "text": txt, "truncated": trunc}
+        t0, t1 = _part_span(d)
+        return {"type": "text", "text": txt, "truncated": trunc, "t0": t0, "t1": t1}
     if t == "reasoning":
         txt, trunc = _truncate(d.get("text") or "", TEXT_LIMIT)
-        return {"type": "reasoning", "text": txt, "truncated": trunc}
+        t0, t1 = _part_span(d)
+        return {"type": "reasoning", "text": txt, "truncated": trunc, "t0": t0, "t1": t1}
     if t == "tool":
         st = d.get("state") or {}
+        t0, t1 = _part_span(d, st)
         if d.get("tool") == "Agent":
             # 子代理派发调用: 结构化展示(调用时机卡片 + 分屏入口)
             inp = st.get("input") or {}
@@ -186,7 +196,7 @@ def _part_view(d: dict) -> dict | None:
                     "description": inp.get("description"),
                     "subagent_type": inp.get("subagent_type"),
                     "prompt": _truncate(inp.get("prompt") or "", 1500)[0],
-                    "output": outp, "truncated": otrunc}
+                    "output": outp, "truncated": otrunc, "t0": t0, "t1": t1}
         try:
             inp = json.dumps(st.get("input"), ensure_ascii=False)
         except (TypeError, ValueError):
@@ -195,7 +205,7 @@ def _part_view(d: dict) -> dict | None:
         outp, otrunc = _truncate(st.get("output") or "", TOOL_OUTPUT_LIMIT)
         return {"type": "tool", "tool": d.get("tool"), "status": st.get("status"),
                 "callID": d.get("callID"),
-                "input": inp, "output": outp, "truncated": otrunc}
+                "input": inp, "output": outp, "truncated": otrunc, "t0": t0, "t1": t1}
     if t == "file":
         return {"type": "file", "mime": d.get("mime")}
     if t == "timeline":
