@@ -72,6 +72,10 @@ a short onboarding: download `http://<server-ip>:8642/tool.zip`, unpack it anywh
 `python zsync.py serve --agent` (Linux/macOS), then hit **re-detect**.
 
 - The agent listens on `127.0.0.1:8643` only — never exposed to the LAN.
+- On Windows always launch via `start-agent.cmd` (or `python zsync.py serve --agent`).
+  Do **not** run bare `zsync.py serve --agent`: cmd resolves it through the `.py`
+  file association, which may be an editor (e.g. VS Code) — that opens the file
+  instead of starting the agent.
 - First-time clients confirm their ZCode directory (auto-detected as `~/.zcode` for
   the current user); after that the local project list loads automatically.
 - Put a shortcut to `start-agent.cmd` into `shell:startup` for auto-start.

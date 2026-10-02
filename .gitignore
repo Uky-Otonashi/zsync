@@ -12,6 +12,7 @@ __pycache__/
 .scratch/
 docs/
 tools/
+ref/
 AGENTS.md
 
 # os / editor

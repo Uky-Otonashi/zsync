@@ -67,6 +67,9 @@ python zsync.py serve --port 8642          # 不可信局域网建议加 --token
 (Linux/macOS), 回到页面点「重新检测」。
 
 - agent 只监听 `127.0.0.1:8643`，不会暴露到局域网。
+- Windows 下请通过 `start-agent.cmd`(或带 `python` 前缀)启动, **不要**直接运行
+  `zsync.py serve --agent`: cmd 会按 `.py` 文件关联解析, 若关联的是编辑器
+  (如 VS Code), 会打开文件而不是启动 agent。
 - 首次访问引导确认本机 ZCode 目录(按当前用户自动探测 `~/.zcode`),
   确认后自动加载本机项目清单。
 - 把 `start-agent.cmd` 的快捷方式放进 `shell:startup` 即可开机自启。

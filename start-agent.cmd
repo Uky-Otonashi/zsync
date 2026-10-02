@@ -1,9 +1,11 @@
 @echo off
-rem zsync 客户端 agent 启动器(最小化窗口运行, 供中央服务器 Web 页面读取本机 zcode 项目)
+rem zsync agent launcher (runs minimized; serves local zcode projects to the central server web UI).
+rem Keep this file ASCII-only: cmd parses it with the OEM codepage (e.g. 936/GBK on zh-CN
+rem Windows), and any non-ASCII bytes get mis-split into bogus commands.
 cd /d "%~dp0"
 where python >nul 2>nul
 if errorlevel 1 (
-  echo [zsync] 未找到 python, 请先安装 Python 或使用内嵌运行时
+  echo [zsync] python not found. Install Python 3.10+ first, or use the embedded runtime.
   pause
   exit /b 1
 )
