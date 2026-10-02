@@ -12,6 +12,9 @@ API(均返回 {"ok": bool, ...}):
   GET  /api/state                       节点状态(本地 zcode 信息 + 远端配置)
   POST /api/settings                    {zcode_home?, remote_url?, remote_token?}
   GET  /api/projects                    本节点本地项目清单
+  GET  /api/project-detail?project_id=  项目详情: git 状态 + 会话列表(只读)
+  GET  /api/session?sid=&offset=&limit= 会话内容浏览(消息/part, 只读, 尾部分页)
+  POST /api/git-fetch                   {project_id} 显式联网 git fetch(仅更新远端引用)
   POST /api/project-config              {project_id, components?, source_filter?}
   GET  /api/filetree?project_id=..&rel=..  项目文件树(带忽略标记, 供筛选器)
   POST /api/build                       {project_id, archive_id?, live?, push?} -> job
@@ -42,13 +45,16 @@ import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
-from . import zclayout, bundle, client, jobs, watcher, nodeconfig, vmpkg
+from . import zclayout, bundle, client, jobs, watcher, nodeconfig, vmpkg, probe
 from .bundle import BundleStore, BundleBuilder, Components, RestoreOptions, restore_bundle
 from .nodeconfig import NodeConfig, source_ignored, dir_fully_ignored, DEFAULT_SOURCE_IGNORES
 
 DEFAULT_PORT = 8642
 AGENT_PORT = 8643
 MAX_JSON_BODY = 8 * 1024 * 1024
+# manifest 内嵌全部打包文件的逐条记录(~100B/文件), 大项目几十万文件时可达数十 MB,
+# 上传 manifest 单独放宽; 普通 API 仍用 MAX_JSON_BODY
+MAX_MANIFEST_BODY = 256 * 1024 * 1024
 
 
 class ServerContext:
@@ -157,9 +163,9 @@ class Handler(BaseHTTPRequestHandler):
     def _send_error_json(self, msg: str, status: int = 400) -> None:
         self._send_json({"ok": False, "error": msg}, status)
 
-    def _read_json(self) -> dict:
+    def _read_json(self, max_bytes: int = MAX_JSON_BODY) -> dict:
         length = int(self.headers.get("Content-Length") or 0)
-        if length > MAX_JSON_BODY:
+        if length > max_bytes:
             raise ValueError("请求体过大")
         raw = self.rfile.read(length) if length else b"{}"
         return json.loads(raw.decode("utf-8"))
@@ -172,6 +178,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(size))
+        # GUI 三件套始终走协商缓存, 避免 Python/前端改动后浏览器拿旧资源
+        if ctype.startswith("text/html") or "javascript" in ctype or "css" in ctype:
+            self.send_header("Cache-Control", "no-cache")
         self._cors_headers()
         self.end_headers()
         with open(path, "rb") as f:
@@ -226,6 +235,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"ok": True, "watchers": self.ctx.watchman.list()})
             elif path == "/api/filetree":
                 self._api_filetree(q)
+            elif path == "/api/project-detail":
+                self._api_project_detail(q)
+            elif path == "/api/session":
+                self._api_session(q)
+            elif path == "/api/session-trace":
+                self._api_session_trace(q)
+            elif path == "/api/session-system":
+                self._api_session_system(q)
             elif path == "/api/vmpkg":
                 self._api_vmpkg_list()
             else:
@@ -295,6 +312,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._api_remote_list(body)
             elif path == "/api/project-config":
                 self._api_project_config(body)
+            elif path == "/api/git-fetch":
+                self._api_git_fetch(body)
             elif path == "/api/vmpkg":
                 self._api_vmpkg(body)
             else:
@@ -415,6 +434,71 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send_json({"ok": True, "rel": rel, "entries": entries,
                          "filter": sf, "preset_ignores": DEFAULT_SOURCE_IGNORES})
+
+    # ---------- 项目详情(只读探测: git/会话) ----------
+    def _api_project_detail(self, q: dict):
+        pid = (q.get("project_id") or [""])[0]
+        p = self.ctx.projects_map().get(pid)
+        if not p:
+            self._send_error_json(f"本地项目不存在: {pid}")
+            return
+        self._send_json({
+            "ok": True,
+            "project": p.to_dict(),
+            "git": probe.probe_git(p.path),
+            "sessions": probe.project_sessions(self.ctx.layout, pid) or [],
+        })
+
+    def _api_session(self, q: dict):
+        sid = (q.get("sid") or [""])[0]
+        if not sid:
+            self._send_error_json("缺少 sid")
+            return
+        try:
+            offset = max(0, int((q.get("offset") or ["0"])[0]))
+            limit = min(500, max(1, int((q.get("limit") or ["150"])[0])))
+        except ValueError:
+            offset, limit = 0, 150
+        r = probe.read_session(self.ctx.layout, sid, offset_from_end=offset, limit=limit)
+        if not r:
+            self._send_error_json(f"会话不存在: {sid}", 404)
+            return
+        self._send_json({"ok": True, **r})
+
+    def _api_session_system(self, q: dict):
+        sid = (q.get("sid") or [""])[0]
+        if not sid:
+            self._send_error_json("缺少 sid")
+            return
+        self._send_json({"ok": True, **probe.session_system(self.ctx.layout, sid)})
+
+    def _api_session_trace(self, q: dict):
+        sid = (q.get("sid") or [""])[0]
+        if not sid:
+            self._send_error_json("缺少 sid")
+            return
+        if (q.get("line") or [""])[0]:
+            try:
+                line_no = int(q["line"][0])
+            except ValueError:
+                self._send_error_json("line 需为整数")
+                return
+            d = probe.session_trace_detail(self.ctx.layout, sid, line_no)
+            if not d:
+                self._send_error_json("轨迹行不存在", 404)
+                return
+            self._send_json({"ok": True, "detail": d})
+            return
+        self._send_json({"ok": True, **probe.session_trace_summary(self.ctx.layout, sid)})
+
+    def _api_git_fetch(self, body: dict):
+        pid = body.get("project_id")
+        p = self.ctx.projects_map().get(pid)
+        if not p or not p.path:
+            self._send_error_json(f"本地项目不存在: {pid}")
+            return
+        self.ctx.log(f"git fetch(显式): {p.path}")
+        self._send_json(probe.fetch_remote(p.path))
 
     # ---------- 构建/推送 ----------
     def _api_build(self, body: dict):
@@ -598,7 +682,7 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---------- 上传接收(远端仓库角色) ----------
     def _recv_upload_manifest(self, archive_id: str):
-        body = self._read_json()
+        body = self._read_json(MAX_MANIFEST_BODY)
         manifest = body.get("manifest") or {}
         if not manifest:
             self._send_error_json("缺少 manifest")
