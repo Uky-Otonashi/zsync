@@ -100,6 +100,8 @@ const I18N = {
     "jobs.title": "任务与日志", "jobs.sub": "客户端与中央服务器的任务执行状态和运行日志(每 3 秒自动刷新)",
     "jobs.agent": "客户端任务", "jobs.agentSub": "本机 agent", "jobs.agentLogs": "客户端日志",
     "jobs.server": "服务器任务", "jobs.serverSub": "中央服务器", "jobs.serverLogs": "服务器日志",
+    "ld.none": "暂无任务", "ld.jobs": "客户端任务", "ld.logs": "客户端日志",
+    "ld.serverUnset": "服务器未配置",
     "filter.addPh": "添加排除规则, 如 site/mirror 或 *.log", "filter.exclude": "排除",
     "sv.created": (t) => `创建 ${t}`, "sv.updated": (t) => `最后更新 ${t}`,
     "st.server": "服务器", "st.client": "客户端", "st.noClient": "客户端未接入",
@@ -205,6 +207,8 @@ const I18N = {
     "jobs.title": "Jobs & Logs", "jobs.sub": "Task status and runtime logs of client & central server (auto-refresh every 3s)",
     "jobs.agent": "Client jobs", "jobs.agentSub": "local agent", "jobs.agentLogs": "Client logs",
     "jobs.server": "Server jobs", "jobs.serverSub": "central server", "jobs.serverLogs": "Server logs",
+    "ld.none": "No jobs yet", "ld.jobs": "Client jobs", "ld.logs": "Client logs",
+    "ld.serverUnset": "Server not set",
     "filter.addPh": "Add exclude rule, e.g. site/mirror or *.log", "filter.exclude": "Exclude",
     "sv.created": (t) => `created ${t}`, "sv.updated": (t) => `updated ${t}`,
     "st.server": "Server", "st.client": "Client", "st.noClient": "Client not connected",
@@ -261,6 +265,7 @@ const AGENT_PORTS = [8643];              // 本机客户端 agent 探测端口
 
 let STATE = null;      // 服务器 /api/state
 let AGENT = null;      // {base, state} —— base 为 "" 表示即本源(旧单机模式)
+let IS_CLIENT = false; // 客户端变体: 页面由 agent 自身伺服(桌面端/本机直开)
 let PROJECTS = [];
 let REPO_ARCHIVES = [];     // 当前仓库来源(服务器或本机存档库)的存档
 let SELECTED = null;        // 选中的存档 {archive_id, info, src}
@@ -392,6 +397,11 @@ async function init() {
     $("#state-line").textContent = "无法连接服务器: " + e.message;
     return;
   }
+  IS_CLIENT = STATE.mode === "agent";
+  if (IS_CLIENT) {
+    document.body.classList.add("client-mode");
+    $("#log-drawer").hidden = false;
+  }
   AGENT = await detectAgent();
   renderStateLine();
 
@@ -438,10 +448,20 @@ async function init() {
 
 function renderStateLine() {
   const el = $("#state-line");
-  const serverName = STATE?.server?.hostname || "?";
   const arcs = STATE?.archives_count ?? "?";
-  el.innerHTML =
-    `<div class="st-chip"><span class="dot ok"></span><span>${t("st.server")} ${esc(serverName)}</span></div>` +
+  let serverChip;
+  if (IS_CLIENT) {
+    // 客户端变体: 页面由本机 agent 伺服, "服务器"指配置的推送/拉取目标
+    const ru = AGENT?.state?.remote?.url || $("#set-remote-url")?.value.trim() || "";
+    let host = "";
+    try { host = ru ? new URL(ru).host : ""; } catch (e) { host = ru; }
+    serverChip = host
+      ? `<div class="st-chip"><span class="dot ok"></span><span>${t("st.server")} ${esc(host)}</span></div>`
+      : `<div class="st-chip bad"><span class="dot err"></span><span>${t("ld.serverUnset")}</span></div>`;
+  } else {
+    serverChip = `<div class="st-chip"><span class="dot ok"></span><span>${t("st.server")} ${esc(STATE?.server?.hostname || "?")}</span></div>`;
+  }
+  el.innerHTML = serverChip +
     (AGENT
       ? `<div class="st-chip"><span class="dot ok"></span><span>${t("st.client")} ${esc(AGENT.state.local?.hostname || "?")}</span></div>`
       : `<div class="st-chip bad"><span class="dot err"></span><span>${t("st.noClient")}</span></div>`) +
@@ -1537,9 +1557,19 @@ async function loadRepo() {
   const src = document.querySelector('input[name="rsrc"]:checked')?.value || "server";
   const box = $("#repo-box");
   let archives = [];
-  if (src === "server") {
+  if (src === "server" && !IS_CLIENT) {
     const r = await api("/api/archives");
     if (!r.ok) { box.innerHTML = `<div class="hint st-error" style="padding:6px 2px">服务器读取失败: ${esc(r.error || "")}</div>`; return; }
+    archives = r.archives || [];
+  } else if (src === "server") {
+    // 客户端变体: 本源即 agent, "服务器仓库"经 agent 的 remote-list 读取配置的远端
+    if (!AGENT) { box.innerHTML = emptyBox("本机未运行 agent"); return; }
+    const r = await apiAgent("/api/remote/list", {
+      method: "POST",
+      body: { url: $("#set-remote-url").value.trim() || undefined,
+              token: $("#set-remote-token").value.trim() || null },
+    });
+    if (!r.ok) { box.innerHTML = `<div class="hint st-error" style="padding:6px 2px">服务器读取失败: ${esc(r.error || "")} (检查「客户端设置」中的服务器地址)</div>`; return; }
     archives = r.archives || [];
   } else {
     if (!AGENT) { box.innerHTML = emptyBox("本机未运行 agent, 无本机存档库"); return; }
@@ -1629,7 +1659,12 @@ $("#btn-restore").addEventListener("click", async () => {
   const components = {};
   $$("[data-rcomp]").forEach(cb => components[cb.dataset.rcomp] = cb.checked);
   const body = { archive_id: SELECTED.id, target_path: target, components };
-  if (SELECTED.src === "server") body.remote = { url: SERVER, archive_id: SELECTED.id };
+  if (SELECTED.src === "server") {
+    // 服务器变体: 远端=本页服务器; 客户端变体: 远端=设置页配置的服务器
+    const rurl = IS_CLIENT ? ($("#set-remote-url").value.trim() || AGENT.state.remote?.url) : SERVER;
+    body.remote = { url: rurl, archive_id: SELECTED.id };
+    if (REMOTE_TOKEN) body.remote.token = REMOTE_TOKEN;
+  }
   const r = await apiAgent("/api/restore", { method: "POST", body });
   if (r.ok) trackJob(r.job_id, `恢复 ${SELECTED.id}`, AGENT.base);
   else notify("恢复失败: " + (r.error || "?"), "err");
@@ -1637,6 +1672,7 @@ $("#btn-restore").addEventListener("click", async () => {
 
 $("#btn-vmpkg").addEventListener("click", async () => {
   if (!SELECTED) return;
+  if (IS_CLIENT) return notify("免 Python 迁移包请在服务器 Web 界面构建(客户端不直接读服务器存档)", "err");
   if (SELECTED.src !== "server") return notify("免Python迁移包基于服务器存档构建, 请在「服务器仓库」来源下选择", "err");
   const target = $("#target-path").value.trim() || prompt("目标机器上的项目路径:", (SELECTED.info?.source || {}).project_path || "");
   if (!target) return;
@@ -1716,8 +1752,22 @@ async function loadLocalArchives() {
   }));
 }
 
-/* ---------------- 任务/日志(agent + 服务器 双端) ---------------- */
+/* ---------------- 任务/日志 ---------------- */
+/* 服务器变体: 双列(agent + 服务器); 客户端变体: 驱动底部抽屉(仅客户端) */
 async function loadJobs() {
+  if (IS_CLIENT) {
+    const r = await apiAgent("/api/jobs").catch(() => null);
+    const jobs = (r?.jobs || []).slice(0, 12);
+    const lr = await apiAgent("/api/logs").catch(() => null);
+    const logs = (lr?.logs || []).join("\n");
+    $("#ld-jobs").innerHTML = renderJobs(jobs) || `<div class="hint" style="padding:8px 2px">${t("ld.none")}</div>`;
+    $("#ld-logs").textContent = logs || "-";
+    const j = jobs[0];
+    $("#ld-summary").textContent = j
+      ? `${j.label} · ${j.phase || ""} ${j.percent.toFixed(0)}%${j.status === "done" ? " ✓" : j.status === "error" ? " ✗" : ""}`
+      : t("ld.none");
+    return;
+  }
   // 客户端任务
   if (AGENT) {
     const r = await apiAgent("/api/jobs").catch(() => null);
@@ -1735,6 +1785,16 @@ async function loadJobs() {
   const slr = await api("/api/logs").catch(() => null);
   $("#logs-server-box").textContent = (slr?.logs || []).join("\n");
 }
+
+/* 底部抽屉: 默认收起, 点击切换; 展开时沿用既有 3s 轮询刷新 */
+$("#ld-toggle").addEventListener("click", () => {
+  const d = $("#log-drawer");
+  d.classList.toggle("open");
+  const open = d.classList.contains("open");
+  $("#ld-body").classList.toggle("hidden", !open);
+  $("#ld-toggle").setAttribute("aria-expanded", open);
+  if (open) loadJobs();
+});
 
 function renderJobs(jobs) {
   return jobs.map(j => `

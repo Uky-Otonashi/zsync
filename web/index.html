@@ -252,6 +252,21 @@
   </div>
 </div>
 
+<!-- 客户端变体(桌面/agent 页): 底部任务与日志抽屉, 默认收起, 仅客户端内容 -->
+<div id="log-drawer" hidden>
+  <button id="ld-toggle" type="button" aria-expanded="false">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+    <span id="ld-summary" data-i18n="ld.none">暂无任务</span>
+    <svg id="ld-chev" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+  </button>
+  <div id="ld-body" class="hidden">
+    <div class="ld-sec-title" data-i18n="ld.jobs">客户端任务</div>
+    <div id="ld-jobs" class="jobs-box"></div>
+    <div class="ld-sec-title" data-i18n="ld.logs">客户端日志</div>
+    <pre id="ld-logs" class="logs"></pre>
+  </div>
+</div>
+
 <div id="toasts" class="toasts" aria-live="polite"></div>
 </body>
 <script src="/app.js"></script>

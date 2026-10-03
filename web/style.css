@@ -437,6 +437,37 @@ input[type = "radio"] { accent-color: var(--accent-strong); }
   color: var(--muted);
 }
 
+/* ---------------- 客户端变体: 底部任务/日志抽屉(默认收起) ---------------- */
+/* 客户端变体(agent 伺服页面/桌面端)不设独立日志页, 侧边栏入口隐藏 */
+body.client-mode [data-tab="jobs"] { display: none; }
+body.client-mode .content { padding-bottom: 110px; }
+body:not(.client-mode) #log-drawer { display: none; }
+#log-drawer {
+  position: fixed; left: 244px; right: 0; bottom: 0; z-index: 50;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -10px 28px -20px rgba(0, 0, 0, .45);
+}
+#ld-toggle {
+  width: 100%; display: flex; align-items: center; gap: 9px;
+  padding: 8px 18px; border: none; border-radius: 0;
+  background: none; color: var(--muted); font-size: 12px; text-align: left;
+}
+#ld-toggle:hover { background: var(--hover); color: var(--text-2); }
+#ld-summary {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--mono); font-size: 11.5px;
+}
+#ld-chev { flex-shrink: 0; transition: transform .18s ease; }
+#log-drawer.open #ld-chev { transform: rotate(180deg); }
+#ld-body { padding: 0 18px 12px; max-height: 320px; overflow-y: auto; }
+.ld-sec-title {
+  font-size: 11px; font-weight: 700; color: var(--faint);
+  text-transform: uppercase; letter-spacing: .12em; margin: 10px 0 4px;
+}
+#ld-jobs { max-height: 150px; overflow-y: auto; }
+#ld-logs { max-height: 160px; }
+
 /* ---------------- 任务进度浮层 ---------------- */
 #job-float {
   position: fixed; right: 20px; bottom: 20px; width: 400px; max-width: calc(100vw - 32px); z-index: 60;
@@ -895,6 +926,7 @@ input[type = "radio"] { accent-color: var(--accent-strong); }
   .page-sticky { position: static; padding-bottom: 0; margin-bottom: 0; }
   .page-sticky::after { content: none; }
   .page-sticky .page-head { margin-top: 18px; }
+  #log-drawer { left: 0; }
   .grid-2col { grid-template-columns: minmax(0, 1fr); }
   .cards { grid-template-columns: minmax(0, 1fr); }
   .ri-badges { display: none; }
