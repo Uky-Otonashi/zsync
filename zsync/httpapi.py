@@ -837,8 +837,8 @@ class Handler(BaseHTTPRequestHandler):
                     if "__pycache__" in froot:
                         continue
                     for f in files:
-                        if f.endswith((".pyc", ".spec")) or f == "build_exe.cmd":
-                            continue
+                        if f.endswith((".pyc", ".spec")) or f in ("build_exe.py", "build_exe.cmd", "BUILD.md"):
+                            continue  # 打包辅助文件不进引导包
                         full = os.path.join(froot, f)
                         zf.write(full, os.path.relpath(full, root))
             for launcher in ("start-agent.cmd", "start-agent.sh"):
