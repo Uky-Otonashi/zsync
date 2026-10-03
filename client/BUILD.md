@@ -23,12 +23,15 @@ python client/build_exe.py
 产物：`dist/zsync-client.exe`（约 50MB，含 Python + .NET 绑定链路）。
 中间产物在 `build/pyi-zsync-client/` 与 `client/zsync-client.spec`，可安全删除。
 
-## 可选: 本地自用图标(⚠️ 版权红线)
+## 图标
 
-zcode 官方图标**只能本地自用**:把 `icon.ico` 放到 `assets/`、`icon.png` 放到 `web/`
-(两个路径都在 .gitignore 排除,**严禁提交或随 Release 发布**,否则构成侵权),
-再运行 `python client/build_exe.py` 即得到带图标的自用 exe。仓库默认不含这些文件,
-`git status` 若看到它们出现,说明 ignore 失效,必须先处理再提交。
+zsync 自绘 logo 随仓库分发：`assets/icon.ico`(exe 图标) + `assets/zsync-icon-*.png`
+(原始尺寸组，`assets/icon.png` 即 1024 版)，`web/icon.png`(512 版) 作为页面 favicon。
+`build_exe.py` 在 Windows 构建时自动嵌入 exe 图标（Linux 产物是 ELF，无图标资源，
+自动跳过），无需任何手工放置。
+
+⚠️ 版权红线不变：**严禁用 zcode 官方图标替换本 logo**——官方图标仅限本机自用，
+不得入仓或随 Release 发布。
 
 ## 行为要点
 

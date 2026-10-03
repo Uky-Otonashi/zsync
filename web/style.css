@@ -114,10 +114,13 @@ code {
 .page-sticky {
   position: sticky; top: 0; z-index: 20;
   background: var(--bg);
-  margin: 0 0 18px; padding: 0 0 8px;
+  /* 顶部间距放容器 padding 而非 page-head margin: margin 会穿透折叠到吸顶盒外,
+     头部要先滚 26px 才吸附且贴顶后间距丢失; padding 让盒子从 content 顶端起
+     就位, 滚动 0 即吸附, 间距始终留在遮罩内 */
+  margin: 0 0 18px; padding: 26px 0 8px;
 }
 .page-sticky .sticky-in { max-width: 1180px; margin: 0 auto; }
-.page-sticky .page-head { margin: 26px 0 18px; }
+.page-sticky .page-head { margin: 0 0 18px; }
 .page-sticky .toolbar { margin-bottom: 0; }
 .page-sticky.is-stuck::after {
   content: ""; position: absolute; left: 0; right: 0; bottom: -26px; height: 26px;
@@ -935,9 +938,8 @@ body:not(.client-mode) #log-drawer { display: none; }
   .side-foot { display: none; }
   .content { padding: 0 16px 48px; overflow: visible; height: auto; min-width: 0; }
   .page-head { margin-top: 18px; }
-  .page-sticky { position: static; padding-bottom: 0; margin-bottom: 0; }
+  .page-sticky { position: static; padding: 18px 0 0; margin-bottom: 0; }
   .page-sticky::after { content: none; }
-  .page-sticky .page-head { margin-top: 18px; }
   #log-drawer { left: 0; }
   .grid-2col { grid-template-columns: minmax(0, 1fr); }
   .cards { grid-template-columns: minmax(0, 1fr); }

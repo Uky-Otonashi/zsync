@@ -448,7 +448,7 @@ class Handler(BaseHTTPRequestHandler):
         # 连通性由设置页「测试连接」(/api/remote/list) 显式检查
         self._send_json({
             "ok": True,
-            "version": "0.4.0",
+            "version": "0.4.1",
             "mode": ctx.mode,
             "server": {
                 "port": ctx.port,
@@ -925,9 +925,7 @@ class Handler(BaseHTTPRequestHandler):
                         continue
                     for f in files:
                         if f.endswith((".pyc", ".spec")) or os.path.basename(f) in (
-                                "build_exe.py", "build_exe.cmd", "BUILD.md",
-                                # 本地自用图标不随引导包分发
-                                "icon.ico", "icon.png"):
+                                "build_exe.py", "build_exe.cmd", "BUILD.md"):
                             continue
                         full = os.path.join(froot, f)
                         zf.write(full, os.path.relpath(full, root))

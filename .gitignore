@@ -14,10 +14,8 @@ dist/
 bin/
 client/zsync-client.spec
 server/zsync-server.spec
-# 本地自用图标(zcode 官方图标有版权, 严禁入仓/发布; 仅供本地构建, 见 client/BUILD.md)
-assets/icon.ico
-assets/icon.png
-web/icon.png
+# zsync logo (assets/icon.ico + zsync-icon-*.png, web/icon.png favicon) 是自绘图标,
+# 随仓库分发; 严禁用 zcode 官方图标替换(版权, 见 client/BUILD.md)
 
 # internal dev scaffolding (not part of the open-source tree)
 .scratch/

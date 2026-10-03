@@ -147,7 +147,8 @@ python client/build_exe.py
 python server/build_exe.py
 ```
 
-产物在 `dist/`。细节见 [client/BUILD.md](client/BUILD.md)，包括如何给客户端换本地图标。
+产物在 `dist/`，Windows exe 自动带上 `assets/` 里的 zsync logo 图标。细节见
+[client/BUILD.md](client/BUILD.md)。
 
 ## 说明与限制
 

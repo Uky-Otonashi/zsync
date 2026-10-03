@@ -165,8 +165,8 @@ python client/build_exe.py
 python server/build_exe.py
 ```
 
-Artifacts land in `dist/`. See [client/BUILD.md](client/BUILD.md) for details,
-including how to give the client a custom icon locally.
+Artifacts land in `dist/`; Windows builds embed the zsync logo from `assets/`.
+See [client/BUILD.md](client/BUILD.md) for details.
 
 ## Notes and limitations
 
