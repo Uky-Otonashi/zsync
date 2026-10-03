@@ -30,3 +30,6 @@ CONTEXT.md
 Thumbs.db
 .idea/
 .vscode/
+
+# zcode 环境自动生成的镜像文件
+.zcodeignore
