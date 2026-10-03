@@ -8,6 +8,11 @@ __pycache__/
 *.pyc
 .venv/
 
+# desktop client build artifacts (client/BUILD.md)
+build/
+dist/
+client/zsync-client.spec
+
 # internal dev scaffolding (not part of the open-source tree)
 .scratch/
 docs/

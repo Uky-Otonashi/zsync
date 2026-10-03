@@ -94,7 +94,9 @@ def find_project(layout, project_id: str):
 
 
 def cmd_gui(args):
-    from client import desktop
+    # client/ 目录本身入 path, desktop 作为顶层模块导入(便于 PyInstaller 分析)
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import desktop
     sys.exit(desktop.run_gui(store_dir=args.store, port=args.port))
 
 
