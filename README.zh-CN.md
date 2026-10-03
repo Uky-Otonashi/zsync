@@ -54,6 +54,20 @@ Web GUI（`web/`）单源维护，运行时按角色切换服务器/客户端变
 - **零运行时依赖** —— 服务器、agent、Web GUI、CLI 全部纯 Python 标准库
   (Windows 桌面 exe 额外捆绑 WebView2 胶水层，见 `client/BUILD.md`)。
 
+## 下载
+
+预编译产物见 [Releases](https://github.com/Uky-Otonashi/zsync/releases) 页:
+
+| 产物 | 平台 | 说明 |
+|---|---|---|
+| `zsync-client-windows-x86_64.exe` | Windows 10+ | 桌面客户端, 单文件, 免装 Python |
+| `zsync-server-windows-x86_64.exe` | Windows | 中央服务器(控制台), 数据目录在 exe 旁(便携) |
+| `zsync-client-linux-x86_64` | Linux x86_64 | `agent`/CLI 模式开箱即用; GUI 窗口另需 WebView/GTK 运行库(见 `client/BUILD.md`) |
+| `zsync-server-linux-x86_64` | Linux x86_64 | 中央服务器控制台二进制 |
+
+macOS: 从源码构建(`client/build_exe.py` / `server/build_exe.py`)。整套系统也可直接用
+Python 3.10+ 源码运行, 零依赖。
+
 ## 快速开始
 
 ### 1. 启动中央服务器(任意机器, 一次性)

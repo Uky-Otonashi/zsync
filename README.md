@@ -60,6 +60,20 @@ core (`zsync/`); the Web GUI (`web/`) is shared and switches variant at runtime.
   stdlib (the Windows desktop exe additionally bundles WebView2 glue; see
   `client/BUILD.md`).
 
+## Download
+
+Prebuilt binaries live on the [Releases](https://github.com/Uky-Otonashi/zsync/releases) page:
+
+| Artifact | Platform | Notes |
+|---|---|---|
+| `zsync-client-windows-x86_64.exe` | Windows 10+ | desktop client, single file, no Python needed |
+| `zsync-server-windows-x86_64.exe` | Windows | central server, console, portable store beside the exe |
+| `zsync-client-linux-x86_64` | Linux x86_64 | `agent`/CLI modes work out of the box; the GUI window additionally needs a WebView/GTK runtime (see `client/BUILD.md`) |
+| `zsync-server-linux-x86_64` | Linux x86_64 | central server console binary |
+
+macOS: build from source (`client/build_exe.py` / `server/build_exe.py`). The whole
+stack also runs directly from a Python 3.10+ checkout with zero dependencies.
+
 ## Quick start
 
 ### 1. Start the central server (any machine, once)

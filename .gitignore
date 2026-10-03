@@ -12,6 +12,11 @@ __pycache__/
 build/
 dist/
 client/zsync-client.spec
+server/zsync-server.spec
+# 本地自用图标(zcode 官方图标有版权, 严禁入仓/发布; 仅供本地构建, 见 client/BUILD.md)
+assets/icon.ico
+assets/icon.png
+web/icon.png
 
 # internal dev scaffolding (not part of the open-source tree)
 .scratch/
@@ -19,6 +24,7 @@ docs/
 tools/
 ref/
 AGENTS.md
+CONTEXT.md
 
 # os / editor
 .DS_Store
