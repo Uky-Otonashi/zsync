@@ -102,7 +102,9 @@ def cmd_gui(args):
 
 def cmd_agent(args):
     from zsync import httpapi
-    httpapi.serve(port=args.port, bind=args.bind, store_dir=args.store,
+    # 冻结 exe 必须显式传默认 store(httpapi 自身默认会指向 _MEIPASS 临时目录)
+    httpapi.serve(port=args.port, bind=args.bind,
+                  store_dir=args.store or _default_store(),
                   token=args.token, mode="agent")
 
 

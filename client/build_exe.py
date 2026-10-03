@@ -5,6 +5,9 @@
 用法: python client/build_exe.py
 产物: dist/zsync-client.exe (内嵌 Python + 共享核心 + client 入口 + web 资产;
       数据目录默认 %LOCALAPPDATA%/zsync, 不污染 exe 所在目录)
+
+可选自用图标: 把图标文件放到 assets/icon.ico(不入仓, .gitignore 排除)再构建,
+脚本检测到才带 --icon。zcode 官方图标有版权, 仅限本地自用, 开源发布严禁携带。
 """
 from __future__ import annotations
 
@@ -14,6 +17,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CLIENT = os.path.join(ROOT, "client")
+ICON = os.path.join(ROOT, "assets", "icon.ico")  # 可选, 仓库默认不存在
 
 
 def main() -> int:
@@ -33,10 +37,15 @@ def main() -> int:
         "--collect-all", "pythonnet",
         os.path.join(CLIENT, "zsync-client.py"),
     ]
+    if os.path.isfile(ICON):
+        cmd += ["--icon", ICON]
+        print(f"[build] 使用本地图标 {ICON} (自用构建, 勿发布)")
+    else:
+        print("[build] 无本地图标文件, 使用默认图标(开源发布形态)")
     print("[build]", " ".join(cmd), flush=True)
     rc = subprocess.call(cmd, cwd=CLIENT)
     if rc == 0:
-        out = os.path.join(ROOT, "dist", "zsync-client.exe")
+        out = os.path.join(ROOT, "dist", "zsync-client.exe" if os.name == "nt" else "zsync-client")
         print(f"[build] OK -> {out} ({os.path.getsize(out)/1e6:.1f} MB)" if os.path.isfile(out)
               else "[build] 未找到产物 exe")
     return rc

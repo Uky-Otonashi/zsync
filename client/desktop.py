@@ -31,6 +31,16 @@ AUTOCLOSE = float(os.environ.get("ZSYNC_GUI_AUTOCLOSE") or 0)
 
 def _log(msg: str) -> None:
     print(f"[zsync-gui] {msg}", flush=True)
+    if getattr(sys, "frozen", False):
+        # windowed exe 无控制台: 同步落盘, 便于排障(且避免异常弹 PyInstaller 对话框)
+        try:
+            base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+            d = os.path.join(base, "zsync", "logs")
+            os.makedirs(d, exist_ok=True)
+            with open(os.path.join(d, "gui.log"), "a", encoding="utf-8") as f:
+                f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
+        except OSError:
+            pass
 
 
 def _default_store() -> str:
@@ -81,53 +91,67 @@ def _stop_agent(httpd, ctx) -> None:
         _log(f"agent 收尾异常(忽略): {e}")
 
 
-def run_gui(store_dir: str | None = None, port: int | None = None) -> int:
-    """打开桌面窗口; 返回退出码。pywebview 缺失时降级为浏览器 + 前台驻留。"""
-    store = store_dir or _default_store()
-    httpd, ctx, port = _start_agent(store, port)
-    url = f"http://127.0.0.1:{port}/"
-    _log(f"agent 就绪: {url} (store={store})")
-
+def _browser_fallback(httpd, ctx, url: str, reason: str) -> None:
+    """降级路径: 系统浏览器 + 前台驻留, Ctrl+C 退出。"""
+    _log(f"{reason}, 降级: 打开系统浏览器, Ctrl+C 退出")
+    webbrowser.open(url)
     try:
-        import webview  # pywebview
-    except ImportError:
-        _log("未安装 pywebview, 降级: 打开系统浏览器, Ctrl+C 退出")
-        webbrowser.open(url)
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            pass
-        _stop_agent(httpd, ctx)
-        return 0
-
-    def on_closed():
-        _log("窗口关闭事件")
-
-    window = webview.create_window(
-        "zsync 客户端 · zcode 环境同步", url,
-        width=1280, height=840, min_size=(960, 600))
-    window.events.closed += on_closed  # pywebview 5+: 关窗回调走事件
-    if AUTOCLOSE > 0:
-        def _autoclose():
-            try:
-                window.destroy()
-            except Exception:  # noqa: BLE001  窗口可能已关
-                pass
-        threading.Timer(AUTOCLOSE, _autoclose).start()
-    try:
-        webview.start(gui="edgechromium")
-    except Exception as e:  # noqa: BLE001  (WebView2 运行时缺失等)
-        _log(f"桌面窗口启动失败({e}), 降级: 打开系统浏览器, Ctrl+C 退出")
-        webbrowser.open(url)
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            pass
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
     _stop_agent(httpd, ctx)
-    _log("已退出")
-    return 0
+
+
+def run_gui(store_dir: str | None = None, port: int | None = None) -> int:
+    """打开桌面窗口; 返回退出码。
+    pywebview 缺失 / WebView2 异常时降级为浏览器 + 前台驻留;
+    任何未捕获异常写日志文件并退出(windowed exe 不允许弹 PyInstaller 对话框)。"""
+    httpd = ctx = None
+    try:
+        store = store_dir or _default_store()
+        httpd, ctx, port = _start_agent(store, port)
+        url = f"http://127.0.0.1:{port}/"
+        _log(f"agent 就绪: {url} (store={store})")
+
+        try:
+            import webview  # pywebview
+        except ImportError:
+            _browser_fallback(httpd, ctx, url, "未安装 pywebview")
+            _log("已退出")
+            return 0
+
+        def on_closed():
+            _log("窗口关闭事件")
+
+        window = webview.create_window(
+            "zsync 客户端 · zcode 环境同步", url,
+            width=1280, height=840, min_size=(960, 600))
+        window.events.closed += on_closed  # pywebview 5+: 关窗回调走事件
+        if AUTOCLOSE > 0:
+            def _autoclose():
+                try:
+                    window.destroy()
+                except Exception:  # noqa: BLE001  窗口可能已关
+                    pass
+            threading.Timer(AUTOCLOSE, _autoclose).start()
+        try:
+            webview.start(gui="edgechromium")
+        except Exception as e:  # noqa: BLE001  (WebView2 运行时缺失等)
+            _browser_fallback(httpd, ctx, url, f"桌面窗口启动失败({e})")
+            _log("已退出")
+            return 0
+        _stop_agent(httpd, ctx)
+        _log("已退出")
+        return 0
+    except SystemExit:
+        raise
+    except Exception:  # noqa: BLE001  兜底: windowed exe 不弹异常对话框
+        import traceback
+        _log("GUI 异常退出:\n" + traceback.format_exc())
+        if httpd is not None and ctx is not None:
+            _stop_agent(httpd, ctx)
+        return 1
 
 
 if __name__ == "__main__":

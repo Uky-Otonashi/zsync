@@ -39,6 +39,8 @@ def _run_text(cmd: list[str]):
 
 
 def _default_store() -> str:
+    if getattr(sys, "frozen", False):  # PyInstaller exe: 数据目录随 exe(便携部署)
+        return os.path.join(os.path.dirname(sys.executable), "data")
     return os.path.join(ROOT, "data")
 
 

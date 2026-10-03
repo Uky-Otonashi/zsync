@@ -231,6 +231,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/style.css":
                 self._send_file(os.path.join(self.ctx.web_dir, "style.css"), "text/css; charset=utf-8")
                 return
+            if path == "/icon.png":
+                self._send_file(os.path.join(self.ctx.web_dir, "icon.png"), "image/png")
+                return
             if path == "/tool.zip":
                 if self.ctx.mode != "server":
                     self._send_error_json("该端点属中央服务器", 404)
@@ -837,8 +840,11 @@ class Handler(BaseHTTPRequestHandler):
                     if "__pycache__" in froot:
                         continue
                     for f in files:
-                        if f.endswith((".pyc", ".spec")) or f in ("build_exe.py", "build_exe.cmd", "BUILD.md"):
-                            continue  # 打包辅助文件不进引导包
+                        if f.endswith((".pyc", ".spec")) or os.path.basename(f) in (
+                                "build_exe.py", "build_exe.cmd", "BUILD.md",
+                                # 本地自用图标不随引导包分发
+                                "icon.ico", "icon.png"):
+                            continue
                         full = os.path.join(froot, f)
                         zf.write(full, os.path.relpath(full, root))
             for launcher in ("start-agent.cmd", "start-agent.sh"):
