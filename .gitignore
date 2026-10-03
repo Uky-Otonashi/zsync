@@ -11,6 +11,7 @@ __pycache__/
 # desktop client build artifacts (client/BUILD.md)
 build/
 dist/
+bin/
 client/zsync-client.spec
 server/zsync-server.spec
 # 本地自用图标(zcode 官方图标有版权, 严禁入仓/发布; 仅供本地构建, 见 client/BUILD.md)

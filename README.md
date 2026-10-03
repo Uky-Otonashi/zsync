@@ -55,7 +55,9 @@ everything — there is no background service.
 If you prefer a browser (or you're on Linux/macOS), open the server's web UI
 instead; it walks you through a one-time setup: download `tool.zip` from the
 server, unpack it, and start the headless agent with `start-agent.cmd` (Windows)
-or `python client/zsync-client.py agent`. Any Python 3.10+ works, no dependencies.
+or `python client/zsync-client.py agent`. Any Python 3.10+ works, no
+dependencies. A server can also hand out the client binaries itself, so new
+machines never need GitHub or Python — see below.
 
 ### Server
 
@@ -79,6 +81,24 @@ python server/zsync-server.py service install  # generates+enables a systemd uni
 ```
 
 Set a `--token` unless the server sits on a fully trusted network.
+
+### Serving client binaries from your own server (optional)
+
+By default new machines fetch the client exe from GitHub. A private deployment
+can distribute it itself: copy the release artifacts you want to hand out (at
+least the `zsync-client-*` ones for the platforms you have) into a `bin/`
+directory next to the server tree:
+
+```
+/opt/zsync/bin/zsync-client-windows-x86_64.exe
+/opt/zsync/bin/zsync-client-linux-x86_64
+```
+
+The first-run guide in the web UI then lists them as direct downloads,
+`/tool.zip?bin=win` (or `linux` / `all`) folds one into the bootstrap zip, and
+the bundled `start-agent` scripts automatically prefer the shipped exe over
+Python. With no `bin/` everything falls back to the plain source zip — the
+headless launch scripts always ship.
 
 ## What's inside an archive
 

@@ -224,6 +224,18 @@ button.mini { padding: 3px 10px; font-size: 12px; border-radius: 7px; }
 }
 .icon-btn:hover { color: var(--text); background: var(--hover); border: none; }
 
+/* 引导页单文件产物直链(对齐 button 视觉, 走 <a>) */
+.dl-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
+a.dl-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 9px; text-decoration: none;
+  font: inherit; font-size: 13px; color: var(--btn-fg);
+  background: var(--btn-bg); border: 1px solid var(--btn-bg); font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .18);
+  transition: filter .15s;
+}
+a.dl-btn:hover { filter: brightness(1.12); }
+
 /* ---------------- 输入 ---------------- */
 input, select {
   background: var(--inset); border: 1px solid var(--border); color: var(--text);

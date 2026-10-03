@@ -29,10 +29,14 @@ API(均返回 {"ok": bool, ...}; [A]=仅 agent, [S]=仅 server):
   POST /api/upload/{id}/manifest | /ztar   接收节点推送 [S 实际使用]
   POST /api/watch / GET /api/watch [A]  实时备份
   GET  /api/jobs /api/jobs/{id} /api/logs
-  GET  /tool.zip [S]                    工具自身打包(目标机引导)
+  GET  /tool.zip [S]                    工具自身打包(目标机引导; 无头启动脚本必带,
+                                        ?bin=win|linux|macos|all 额外打入 bin/ 内对应平台单文件产物)
+  GET  /api/downloads [S]               bin/ 内可下发的单文件产物清单(名称/大小/sha256/平台)
+  GET  /dl/{name} [S]                   直链下发 bin/ 内某个单文件产物
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -64,7 +68,19 @@ AGENT_ONLY_GET = {"/api/projects", "/api/project-detail", "/api/session",
 AGENT_ONLY_POST = {"/api/settings", "/api/build", "/api/push", "/api/restore",
                    "/api/watch", "/api/remote/list", "/api/project-config",
                    "/api/git-fetch"}
-SERVER_ONLY_GET = {"/tool.zip"}
+SERVER_ONLY_GET = {"/tool.zip", "/api/downloads"}
+
+
+def _artifact_platform(name: str) -> str | None:
+    """按 Releases 产物命名惯例归类平台(zsync-client-windows-x86_64.exe → windows)。"""
+    n = name.lower()
+    if "windows" in n or n.endswith(".exe"):
+        return "windows"
+    if "linux" in n:
+        return "linux"
+    if "darwin" in n or "macos" in n or "osx" in n:
+        return "macos"
+    return None
 
 
 def _gate(ctx: "ServerContext", path: str, method: str) -> str | None:
@@ -100,7 +116,47 @@ class ServerContext:
         self._loglock = threading.Lock()
         self.web_dir = web_dir or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
         self.tool_root = tool_root or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # bin/ = 服务端部署时附带的单文件产物(各平台 client exe 等), 供引导页直链下发;
+        # 可选目录, 缺失时引导包只含 Python 源码 + 无头启动脚本。
+        # 冻结态单文件 server 的 tool_root 在临时解包目录, 改挂到 exe 旁才可部署 bin/
+        bin_base = (os.path.dirname(os.path.abspath(sys.executable))
+                    if getattr(sys, "frozen", False) else self.tool_root)
+        self.bin_dir = os.path.join(bin_base, "bin")
+        self._bin_cache: dict[str, tuple[float, int, str]] = {}
+        self._bin_lock = threading.Lock()
         self.started_at = time.time()
+
+    def bin_artifacts(self) -> list[dict]:
+        """bin/ 内可下发产物清单; sha256 按 (mtime, size) 懒计算缓存。"""
+        out: list[dict] = []
+        if not os.path.isdir(self.bin_dir):
+            return out
+        for name in sorted(os.listdir(self.bin_dir)):
+            p = os.path.join(self.bin_dir, name)
+            if not os.path.isfile(p):
+                continue
+            try:
+                st = os.stat(p)
+            except OSError:
+                continue
+            with self._bin_lock:
+                cached = self._bin_cache.get(name)
+            if not cached or cached[0] != st.st_mtime or cached[1] != st.st_size:
+                h = hashlib.sha256()
+                with open(p, "rb") as f:
+                    for chunk in iter(lambda: f.read(4 * 1024 * 1024), b""):
+                        h.update(chunk)
+                cached = (st.st_mtime, st.st_size, h.hexdigest())
+                with self._bin_lock:
+                    self._bin_cache[name] = cached
+            low = name.lower()
+            out.append({
+                "name": name, "size": st.st_size, "sha256": cached[2],
+                "platform": _artifact_platform(name),
+                "kind": ("client" if low.startswith("zsync-client")
+                         else "server" if low.startswith("zsync-server") else "other"),
+            })
+        return out
 
     def reload_layout(self) -> None:
         """设置变更后刷新本节点 zcode 布局(并重启 watcher 用新路径)。"""
@@ -193,7 +249,7 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length) if length else b"{}"
         return json.loads(raw.decode("utf-8"))
 
-    def _send_file(self, path: str, ctype: str) -> None:
+    def _send_file(self, path: str, ctype: str, download: str | None = None) -> None:
         if not os.path.isfile(path):
             self._send_error_json("文件不存在", 404)
             return
@@ -201,6 +257,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(size))
+        if download:
+            self.send_header("Content-Disposition", f'attachment; filename="{download}"')
         # GUI 三件套始终走协商缓存, 避免 Python/前端改动后浏览器拿旧资源
         if ctype.startswith("text/html") or "javascript" in ctype or "css" in ctype:
             self.send_header("Cache-Control", "no-cache")
@@ -238,7 +296,14 @@ class Handler(BaseHTTPRequestHandler):
                 if self.ctx.mode != "server":
                     self._send_error_json("该端点属中央服务器", 404)
                     return
-                self._send_tool_zip()
+                self._send_tool_zip(q)
+                return
+            m = re.match(r"^/dl/([^/]+)$", path)
+            if m:
+                if self.ctx.mode != "server":
+                    self._send_error_json("该端点属中央服务器", 404)
+                    return
+                self._send_bin_file(m.group(1))
                 return
             if not path.startswith("/api/"):
                 self._send_error_json("未知路径", 404)
@@ -276,6 +341,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._api_session_trace(q)
             elif path == "/api/session-system":
                 self._api_session_system(q)
+            elif path == "/api/downloads":
+                self._send_json({"ok": True, "downloads": self.ctx.bin_artifacts()})
             elif path == "/api/vmpkg":
                 self._api_vmpkg_list()
             else:
@@ -829,8 +896,25 @@ class Handler(BaseHTTPRequestHandler):
         out.sort(key=lambda m: m.get("created_at", 0), reverse=True)
         self._send_json({"ok": True, "packages": out})
 
-    def _send_tool_zip(self):
-        """引导包: 共享核心 + web 资产 + 客户端入口 + 启动器, 保持仓库相对布局。"""
+    def _send_bin_file(self, name: str):
+        """直链下发 bin/ 内产物; 只接受 bin_artifacts() 列出的真实文件名, 杜绝穿越。"""
+        if name not in {a["name"] for a in self.ctx.bin_artifacts()}:
+            self._send_error_json("产物不存在", 404)
+            return
+        self._send_file(os.path.join(self.ctx.bin_dir, name),
+                        "application/octet-stream", download=name)
+
+    def _send_tool_zip(self, q: dict | None = None):
+        """引导包: 共享核心 + web 资产 + 客户端入口 + 启动器, 保持仓库相对布局。
+
+        无头启动脚本永远随包; ?bin=win|linux|macos|all 额外把 bin/ 内对应平台的
+        单文件产物打到包根(启动器会优先用它), 产物本身已压缩故以 STORED 写入。
+        """
+        q = q or {}
+        want = (q.get("bin") or [""])[0].lower()
+        plat = {"win": "windows", "windows": "windows",
+                "linux": "linux", "macos": "macos", "darwin": "macos",
+                "all": "all"}.get(want)
         root = self.ctx.tool_root
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -854,6 +938,14 @@ class Handler(BaseHTTPRequestHandler):
             readme = os.path.join(root, "README.md")
             if os.path.isfile(readme):
                 zf.write(readme, "README.md")
+            if plat:
+                arts = [a for a in self.ctx.bin_artifacts()
+                        if plat == "all" or a["platform"] == plat]
+                for a in arts:
+                    zf.write(os.path.join(self.ctx.bin_dir, a["name"]), a["name"],
+                             compress_type=zipfile.ZIP_STORED)
+                if not arts:
+                    self.ctx.log(f"tool.zip?bin={want} 未命中 bin/ 产物, 已按纯源码包下发")
         data = buf.getvalue()
         self.send_response(200)
         self.send_header("Content-Type", "application/zip")
@@ -920,8 +1012,12 @@ def build_server(port: int | None = None, bind: str | None = None, store_dir: st
         ctx.log(f"  局域网访问: http://{ip}:{port}")
     if mode == "agent":
         ctx.log("  agent 模式: 供本机浏览器跨源访问中央服务器页面 / 桌面 GUI 同源调用")
-    elif not token:
-        ctx.log("  警告: 未设置 token, 局域网内任何机器都可访问(开发模式)")
+    else:
+        arts = ctx.bin_artifacts()
+        if arts:
+            ctx.log(f"  bin/ 下发产物: {', '.join(a['name'] for a in arts)}")
+        if not token:
+            ctx.log("  警告: 未设置 token, 局域网内任何机器都可访问(开发模式)")
     return httpd, ctx
 
 

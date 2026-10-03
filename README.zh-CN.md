@@ -48,7 +48,8 @@ exe —— 双击出窗口，关窗全停。客户端内嵌一个只监听本机
 喜欢用浏览器、或者你在 Linux/macOS 上：直接打开服务器的 Web 界面，它会引导你
 完成一次性接入 —— 从服务器下载 `tool.zip` 解压，Windows 双击 `start-agent.cmd`，
 Linux/macOS 运行 `python client/zsync-client.py agent`。任何 Python 3.10+ 都行，
-零依赖。
+零依赖。服务器也可以自己附带客户端产物（见下文），新机器连 GitHub 和 Python
+都不需要。
 
 ### 服务器
 
@@ -72,6 +73,21 @@ python server/zsync-server.py service install  # 生成并启用 systemd 服务
 ```
 
 服务器不在完全可信的网络里就务必设置 `--token`。
+
+### 让服务器自己下发客户端产物（可选）
+
+默认情况下新机器从 GitHub 下载客户端 exe；私有部署可以让服务器自己发。把想
+下发的发布产物（至少是各平台的 `zsync-client-*`）放进服务端目录旁的 `bin/`：
+
+```
+/opt/zsync/bin/zsync-client-windows-x86_64.exe
+/opt/zsync/bin/zsync-client-linux-x86_64
+```
+
+之后 Web 界面的首次接入引导会直接给出各平台下载链接；`/tool.zip?bin=win`
+（或 `linux` / `all`）会把对应产物打进引导包；包里的 `start-agent` 脚本会自动
+优先用随包的单文件客户端，没有才回退 Python。`bin/` 留空则一切照旧 —— 引导包
+永远带着无头启动脚本和 Python 源码。
 
 ## 归档里有什么
 

@@ -72,8 +72,12 @@
   <div class="card guide" id="agent-guide" style="display:none">
     <h3 data-i18n="guide.title">首次接入 —— 在本机启动客户端 agent</h3>
     <p class="hint" data-i18n="guide.intro">本页面由中央服务器提供, 读取本机 zcode 项目需要在本机运行一个轻量 agent(纯 Python 标准库, 无需安装任何依赖):</p>
+    <div id="guide-downloads" style="display:none">
+      <p class="hint" data-i18n="guide.dl.title">免 Python 方式: 服务器已附带单文件客户端, 下载对应平台产物直接运行即可, 无头启动命令「zsync-client agent」。</p>
+      <div class="dl-list" id="guide-dl-list"></div>
+    </div>
     <ol class="steps">
-      <li data-i18n="guide.s1">下载工具包 <code class="code-chip" id="guide-tool-url"></code></li>
+      <li><span data-i18n="guide.s1">下载工具包</span> <code class="code-chip" id="guide-tool-url"></code></li>
       <li data-i18n="guide.s2">解压到任意目录(如 <code>C:\zsync</code>)</li>
       <li data-i18n="guide.s3">双击 <code>start-agent.cmd</code>(Windows), 或运行 <code>python client/zsync-client.py agent</code>(Linux/macOS)</li>
       <li data-i18n="guide.s4">回到本页点击「重新检测」—— 首次将引导确认本机 zcode 目录(默认 <code>~/.zcode</code> 自动探测), 之后自动加载本机项目清单</li>

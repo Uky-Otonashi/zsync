@@ -80,6 +80,7 @@ const I18N = {
     "guide.s3": "双击 start-agent.cmd(Windows), 或运行 python client/zsync-client.py agent(Linux/macOS)",
     "guide.s4": "回到本页点击「重新检测」—— 首次将引导确认本机 zcode 目录(默认 ~/.zcode 自动探测), 之后自动加载本机项目清单",
     "guide.tip": "Windows 下请始终通过 start-agent.cmd 或带 python 前缀运行, 不要直接敲 zsync-client.py agent —— 若 .py 关联的是编辑器(如 VS Code), 会弹出编辑器而不是运行 agent。agent 只监听 127.0.0.1:8643, 不对局域网开放; 浏览器若弹出「允许访问本地网络」请选择允许。也可改用桌面客户端(zsync-client.exe): 启动即自动拉起 agent, 关闭即停止。",
+  "guide.dl.title": "免 Python 方式(推荐): 服务器已附带单文件客户端, 点击下载对应平台产物直接运行即可, 无头启动命令「<产物名> agent」; 没有合适产物时再用下方 Python 工具包方式。",
     "guide.redetect": "重新检测本机 agent", "tip.label": "提示",
     "remote.title": "服务器仓库", "remote.sub": "浏览中央服务器或本机存档库中的备份, 拉取恢复到任意机器",
     "remote.source": "仓库来源", "remote.srcServer": "服务器仓库", "remote.srcAgent": "本机存档库 (agent)",
@@ -187,6 +188,7 @@ const I18N = {
     "guide.s3": "Double-click start-agent.cmd (Windows), or run python client/zsync-client.py agent (Linux/macOS)",
     "guide.s4": "Back on this page click “Redetect” — first run guides you to confirm the local zcode directory, then loads the project list",
     "guide.tip": "On Windows always launch via start-agent.cmd or with a python prefix; a bare zsync-client.py may open an editor if .py is associated with one. The agent only listens on 127.0.0.1:8643. Allow “local network access” if the browser asks. Or use the desktop client (zsync-client.exe): it starts the agent on launch and stops it on exit.",
+  "guide.dl.title": "No-Python route (recommended): the server bundles single-file clients — download the artifact for your platform and run it; headless start: <artifact> agent. If nothing matches, fall back to the Python package below.",
     "guide.redetect": "Redetect local agent", "tip.label": "Tip",
     "remote.title": "Server Repository", "remote.sub": "Browse backups on the central server or local archive store, pull & restore to any machine",
     "remote.source": "Source", "remote.srcServer": "Server repository", "remote.srcAgent": "Local store (agent)",
@@ -390,6 +392,27 @@ async function detectAgent() {
   return null;
 }
 
+/* 引导页: 服务器 bin/ 附带的单文件客户端直链(免 Python); 无产物/旧版服务器时整块隐藏 */
+async function renderGuideDownloads() {
+  const box = $("#guide-downloads"), list = $("#guide-dl-list");
+  let j = null;
+  try { j = await api("/api/downloads"); } catch (e) { /* 忽略, 走 python 引导 */ }
+  const items = ((j && j.downloads) || []).filter(a => a.kind === "client" && a.platform);
+  if (!j || !j.ok || !items.length) { box.style.display = "none"; return; }
+  list.innerHTML = "";
+  for (const a of items) {
+    const el = document.createElement("a");
+    el.className = "dl-btn";
+    el.href = `${SERVER}/dl/${encodeURIComponent(a.name)}`;
+    const plat = { windows: "Windows", linux: "Linux", macos: "macOS" }[a.platform] || a.platform;
+    const arch = /x86_64|amd64/.test(a.name) ? " x64" : (/arm64|aarch64/.test(a.name) ? " arm64" : "");
+    el.textContent = `${plat}${arch} · ${fmtBytes(a.size)}`;
+    el.title = `${a.name}\nsha256: ${a.sha256.slice(0, 16)}…`;
+    list.appendChild(el);
+  }
+  box.style.display = "";
+}
+
 async function init() {
   try {
     STATE = await api("/api/state");
@@ -409,6 +432,7 @@ async function init() {
   if (!AGENT) {
     guide.style.display = "";
     $("#guide-tool-url").textContent = SERVER + "/tool.zip";
+    renderGuideDownloads();
     $("#projects-box").innerHTML = "";
     $("#local-banner").innerHTML =
       `<span style="color:var(--red)">本机尚未接入:</span> 下方步骤启动本机客户端 agent 后, 此页将自动加载本机 zcode 项目。`;
