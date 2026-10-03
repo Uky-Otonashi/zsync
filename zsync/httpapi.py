@@ -62,7 +62,8 @@ MAX_JSON_BODY = 8 * 1024 * 1024
 MAX_MANIFEST_BODY = 256 * 1024 * 1024
 
 # 角色门控: server(中央服务器)不暴露读写本机 zcode 的客户端端点
-AGENT_ONLY_GET = {"/api/projects", "/api/project-detail", "/api/session",
+AGENT_ONLY_GET = {"/api/projects", "/api/project-detail", "/api/project-sizes",
+                  "/api/session",
                   "/api/session-trace", "/api/session-system", "/api/filetree",
                   "/api/watch"}
 AGENT_ONLY_POST = {"/api/settings", "/api/build", "/api/push", "/api/restore",
@@ -335,6 +336,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._api_filetree(q)
             elif path == "/api/project-detail":
                 self._api_project_detail(q)
+            elif path == "/api/project-sizes":
+                self._api_project_sizes(q)
             elif path == "/api/session":
                 self._api_session(q)
             elif path == "/api/session-trace":
@@ -448,7 +451,7 @@ class Handler(BaseHTTPRequestHandler):
         # 连通性由设置页「测试连接」(/api/remote/list) 显式检查
         self._send_json({
             "ok": True,
-            "version": "0.4.3",
+            "version": "0.4.4",
             "mode": ctx.mode,
             "server": {
                 "port": ctx.port,
@@ -552,6 +555,30 @@ class Handler(BaseHTTPRequestHandler):
             "git": probe.probe_git(p.path),
             "sessions": probe.project_sessions(self.ctx.layout, pid) or [],
         })
+
+    def _api_project_sizes(self, q: dict):
+        """备份前体积估算: 逐组件磁盘占用(与 build 同口径) + 最近一次存档的
+        实测压缩比, 供前端展示"勾选合计/预计打包大小"。"""
+        pid = (q.get("project_id") or [""])[0]
+        p = self.ctx.projects_map().get(pid)
+        if not p:
+            self._send_error_json(f"本地项目不存在: {pid}")
+            return
+        sf = self.ctx.cfg.project_config(pid).get("source_filter")
+        sizes = bundle.estimate_component_sizes(self.ctx.layout, p.to_dict(), sf)
+        last = None
+        for m in self.ctx.store.list_archives():
+            st = m.get("stats") or {}
+            if (m.get("source") or {}).get("project_id") != pid:
+                continue
+            staged = st.get("staged_bytes") or 0
+            ztar = m.get("ztar_bytes") or 0
+            if staged > 1024 * 1024 and ztar > 0:
+                last = {"ztar_bytes": ztar, "staged_bytes": staged,
+                        "updated_at": m.get("updated_at")}
+                break  # list_archives 按时间倒序, 首个即最新
+        self._send_json({"ok": True, "project_id": pid, "sizes": sizes,
+                         "last_archive": last})
 
     def _api_session(self, q: dict):
         sid = (q.get("sid") or [""])[0]

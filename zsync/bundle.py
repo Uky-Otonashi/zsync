@@ -25,6 +25,7 @@ import shutil
 import sqlite3
 import tarfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, asdict
 
 from . import zclayout, dbio, tasksindex, nodeconfig
@@ -130,6 +131,139 @@ def _walk_files(path: str) -> list[str]:
         for f in files:
             out.append(os.path.relpath(os.path.join(root, f), path).replace("\\", "/"))
     return sorted(out)
+
+
+# ---------------- 备份前体积估算(与 build() 同口径, 只读不打扰) ----------------
+
+_SIZES_CACHE: dict[str, tuple[float, dict]] = {}
+_SIZES_TTL = 30.0  # 秒; 用户工作中数据持续增长, 展开面板时重新拉取即可
+
+# 与 build() 的源码筛选一致: 超过此尺寸的单文件跳过
+_SKIP_BIG_FILE = 512 * 1024 * 1024
+
+
+def _du(path: str) -> int:
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for f in files:
+            try:
+                total += os.path.getsize(os.path.join(root, f))
+            except OSError:
+                pass
+    return total
+
+
+def _source_bytes(project_path: str, sf: dict) -> tuple[int, int]:
+    """应用文件筛选后的源码体积与文件数(不含 .git —— include_git 单独计)。"""
+    total = n = 0
+    for root, dirs, files in os.walk(project_path):
+        rel_root = os.path.relpath(root, project_path).replace("\\", "/")
+        dirs[:] = [
+            d for d in dirs
+            if d != ".git"
+            and not nodeconfig.dir_fully_ignored((rel_root + "/" + d) if rel_root != "." else d, sf)
+        ]
+        for f in files:
+            rel = (rel_root + "/" + f) if rel_root != "." else f
+            if nodeconfig.source_ignored(rel, sf):
+                continue
+            try:
+                sz = os.path.getsize(os.path.join(root, f))
+            except OSError:
+                continue
+            if sz > _SKIP_BIG_FILE:
+                continue
+            total += sz
+            n += 1
+    return total, n
+
+
+def _sessions_db_bytes(con: sqlite3.Connection, sids: list[str]) -> int:
+    """会话数据的体积代理: 大字段(part.data/message.data)长度和。
+    导出的 sessions.sqlite 还含表结构与索引, 实际略大, 作估算足够。"""
+    if not sids:
+        return 0
+    ph = ",".join("?" * len(sids))
+    total = 0
+    for table in ("part", "message"):
+        try:
+            total += con.execute(
+                f"SELECT coalesce(sum(length(data)), 0) FROM {table} "
+                f"WHERE session_id IN ({ph})", sids).fetchone()[0]
+        except sqlite3.Error:
+            pass
+    return total
+
+
+def estimate_component_sizes(layout: zclayout.ZcodeLayout, project: dict,
+                             source_filter: dict | None = None,
+                             use_cache: bool = True) -> dict:
+    """逐组件估算"执行备份会打包多少数据"(字节)。口径与 BundleBuilder.build()
+    一致: 同样的 subagent 归并、同样的源码筛选规则; 区别是只累计体积不复制。
+
+    返回 {组件key: 字节数} + {"source_files": 文件数, "computed_at": 毫秒}。
+    """
+    pid = project["project_id"]
+    now = time.time()
+    if use_cache:
+        cached = _SIZES_CACHE.get(pid)
+        if cached and now - cached[0] < _SIZES_TTL:
+            return cached[1]
+
+    sf = source_filter or {}
+    ppath = project.get("path")
+    con, tmp = zclayout.open_ro(layout.db_path)
+    try:
+        sids = zclayout.project_session_ids(con, pid)
+        # sqlite 连接默认禁止跨线程: db 求和留在当前线程, 纯文件系统部分并行
+        db_bytes = _sessions_db_bytes(con, sids)
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            f_src = ex.submit(_source_bytes, ppath, sf) if ppath and os.path.isdir(ppath) else None
+            f_git = ex.submit(_du, os.path.join(ppath, ".git")) if ppath else None
+            f_glob = ex.submit(lambda: {
+                "global_skills": _du(layout.skills_dir) if os.path.isdir(layout.skills_dir) else 0,
+                "global_agents_md": sum(
+                    os.path.getsize(os.path.join(layout.agents_dir, f))
+                    for f in os.listdir(layout.agents_dir) if f.endswith(".md")
+                ) if os.path.isdir(layout.agents_dir) else 0,
+                "global_constraints": sum(
+                    os.path.getsize(f) for f in layout.global_constraint_files()),
+                "global_plugins": os.path.getsize(layout.plugins_config)
+                if os.path.isfile(layout.plugins_config) else 0,
+            })
+            # 会话附属目录与 rollout 在当前线程算(每个 sid 一次 stat/du, 很快)
+            per_dir: dict[str, int] = {"artifacts": 0, "agents": 0, "exec_logs": 0}
+            bases = {"artifacts": layout.artifacts_dir, "agents": layout.agents_dir,
+                     "exec_logs": layout.exec_dir}
+            rollout = 0
+            for sid in sids:
+                for key, base in bases.items():
+                    d = os.path.join(base, sid)
+                    if os.path.isdir(d):
+                        per_dir[key] += _du(d)
+                try:
+                    rollout += os.path.getsize(
+                        os.path.join(layout.rollout_dir, f"model-io-{sid}.jsonl"))
+                except OSError:
+                    pass
+            memory = _du(layout.memory_dir_for(ppath)) if ppath else 0
+            out = {
+                "sessions": db_bytes,
+                "rollout": rollout,
+                **per_dir,
+                "memory": memory,
+                "source": (f_src.result()[0] if f_src else 0),
+                "include_git": (f_git.result() if f_git else 0),
+                **f_glob.result(),
+                "source_files": (f_src.result()[1] if f_src else 0),
+                "computed_at": int(now * 1000),
+            }
+    finally:
+        con.close()
+        if tmp:
+            shutil.rmtree(tmp, ignore_errors=True)
+    _SIZES_CACHE[pid] = (now, out)
+    return out
 
 
 class BundleStore:
@@ -449,7 +583,10 @@ class BundleBuilder:
             },
             "components": components.to_dict(),
             "source_filter": source_filter or {},
-            "stats": stats | {"counts": counts, "copied_files": copied_files},
+            "stats": stats | {"counts": counts, "copied_files": copied_files,
+                              # 打包前的 staging 数据体积: 备份前估算用其与
+                              # ztar_bytes 的比值外推压缩后大小
+                              "staged_bytes": sum(f["size"] for f in files)},
         }
         if old:
             manifest["history"] = (old.get("history") or [])[-19:] + [

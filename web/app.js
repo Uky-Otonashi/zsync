@@ -21,6 +21,8 @@ const I18N = {
     "build.liveOn": "实时备份中", "build.rebuilt": (n) => `已重建 ${n} 次`, "build.failed": "备份失败: ",
     "card.sessions": "会话", "card.trace": "轨迹", "card.memory": "记忆", "card.list": "列表",
     "card.comps": "备份内容", "card.grpProject": "项目级", "card.grpGlobal": "全局级 · 可选, 随包分发",
+    "card.sizeTotal": "勾选内容合计", "card.packEst": (s, r) => `预计打包 ≈ ${s}（按上次压缩率 ${r}%）`,
+    "card.packNoRef": "打包为 tar.gz 后通常更小", "card.sizeFail": "体积统计失败",
     "card.ghost": "已移出侧边栏", "card.empty": "no-match-placeholder<br>检查「客户端设置」中的 zcode 目录是否正确",
     "d.overview": "概览", "d.git": "Git 仓库", "d.files": "项目文件", "d.filesSub": "点击目录展开 · 只读",
     "d.sessions": (n) => `zcode 会话 ${n} 个 · 点击浏览内容`,
@@ -129,6 +131,8 @@ const I18N = {
     "build.liveOn": "Live", "build.rebuilt": (n) => `rebuilt ${n}×`, "build.failed": "Backup failed: ",
     "card.sessions": "Sessions", "card.trace": "Trace", "card.memory": "Memory", "card.list": "listed",
     "card.comps": "Backup contents", "card.grpProject": "Project-level", "card.grpGlobal": "Global · optional, shipped with bundle",
+    "card.sizeTotal": "Selected total", "card.packEst": (s, r) => `estimated archive ≈ ${s} (${r}% at last pack)`,
+    "card.packNoRef": "tar.gz packing usually shrinks this", "card.sizeFail": "size measuring failed",
     "card.ghost": "Removed from sidebar", "card.empty": "No matching zcode projects on this machine<br>Check the zcode directory in Client Settings",
     "d.overview": "Overview", "d.git": "Git Repository", "d.files": "Project Files", "d.filesSub": "Click a folder to expand · read-only",
     "d.sessions": (n) => `zcode sessions: ${n} · click to browse`,
@@ -565,10 +569,12 @@ function renderProjects() {
           ${COMP_DEFS.filter(c => !GLOBAL_KEYS.includes(c.key)).map(c => compCb(p.project_id, c, comps)).join("")}
           <div class="grp">${t("card.grpGlobal")}</div>
           ${COMP_DEFS.filter(c => GLOBAL_KEYS.includes(c.key)).map(c => compCb(p.project_id, c, comps)).join("")}
+          <div class="comp-total"><span class="ct-label">${t("card.sizeTotal")}</span><span class="ct-val" data-ct="${esc(p.project_id)}"></span></div>
         </div>
       </details>
       <div class="pcard-actions">
         <button class="primary" data-act="build">${t("build.now")}</button>
+        <span class="est-chip" data-est="${esc(p.project_id)}" title="${t("card.sizeTotal")}"></span>
         <button class="ghost" data-act="filter">${t("build.filter")}</button>
         <span class="spacer"></span>
         <span class="switch-label">${t("build.live")}${w ? `<small>${t("build.rebuilt", w.rebuilds)}</small>` : ""}</span>
@@ -577,7 +583,10 @@ function renderProjects() {
     card.querySelectorAll("[data-comp]").forEach(cb => cb.addEventListener("change", () => {
       projComps[p.project_id][cb.dataset.comp] = cb.checked;
       apiAgent("/api/project-config", { method: "POST", body: { project_id: p.project_id, components: projComps[p.project_id] } });
+      updateSizeUI(p, card);
     }));
+    const compsDet = card.querySelector(".pcard-comps");
+    compsDet.addEventListener("toggle", () => { if (compsDet.open) loadSizes(p, card); });
     card.querySelector('[data-act="build"]').addEventListener("click", () => doBuild(p));
     card.querySelector('[data-act="filter"]').addEventListener("click", () => openFileTree(p));
     const sw = card.querySelector('[data-act="watch"]');
@@ -591,7 +600,50 @@ function renderProjects() {
 }
 
 function compCb(pid, c, comps) {
-  return `<label class="comp"><input type="checkbox" data-comp="${c.key}" ${comps[c.key] ? "checked" : ""}><span>${t("comp." + c.key + ".l")}</span><small class="comp-desc">${t("comp." + c.key + ".d")}</small></label>`;
+  return `<label class="comp"><input type="checkbox" data-comp="${c.key}" ${comps[c.key] ? "checked" : ""}><span class="comp-txt">${t("comp." + c.key + ".l")}<small class="comp-desc">${t("comp." + c.key + ".d")}</small></span><span class="comp-size" data-skey="${c.key}"></span></label>`;
+}
+
+/* ---------------- 备份体积估算(懒加载: 展开备份内容时拉取) ---------------- */
+const projSizes = {};  // project_id -> { sizes, last, ts }
+
+function updateSizeUI(p, card) {
+  const st = projSizes[p.project_id];
+  if (!st) return;
+  const comps = projComps[p.project_id] || {};
+  let total = 0;
+  for (const c of COMP_DEFS) {
+    // include_git 只在源码一并打包时生效(与后端 build 口径一致)
+    if (c.key === "include_git" && !comps.source) continue;
+    if (comps[c.key]) total += st.sizes[c.key] || 0;
+  }
+  const ct = card.querySelector("[data-ct]");
+  if (ct) {
+    const hint = (st.last && total > 0)
+      ? t("card.packEst", fmtBytes(Math.max(1, Math.round(total * st.last.ztar_bytes / st.last.staged_bytes))),
+          (st.last.ztar_bytes * 100 / st.last.staged_bytes).toFixed(1))
+      : t("card.packNoRef");
+    ct.innerHTML = `<b>≈ ${fmtBytes(total)}</b><small>${hint}</small>`;
+  }
+  const est = card.querySelector("[data-est]");
+  if (est) est.textContent = "≈ " + fmtBytes(total);
+}
+
+async function loadSizes(p, card) {
+  const pid = p.project_id;
+  const cached = projSizes[pid];
+  if (cached && Date.now() - cached.ts < 30000) { updateSizeUI(p, card); return; }
+  const cells = card.querySelectorAll(".comp-size");
+  cells.forEach(el => { if (!el.textContent) el.textContent = "…"; });
+  const r = await apiAgent(`/api/project-sizes?project_id=${encodeURIComponent(pid)}`, {}, 60000);
+  if (!r.ok || !r.sizes) {
+    cells.forEach(el => el.textContent = "?");
+    const ct = card.querySelector("[data-ct]");
+    if (ct) ct.textContent = t("card.sizeFail");
+    return;
+  }
+  projSizes[pid] = { sizes: r.sizes, last: r.last_archive, ts: Date.now() };
+  cells.forEach(el => el.textContent = fmtBytes(r.sizes[el.dataset.skey] ?? null));
+  updateSizeUI(p, card);
 }
 
 async function doBuild(p, live = false) {
@@ -602,7 +654,10 @@ async function doBuild(p, live = false) {
     if (REMOTE_TOKEN) body.push_token = REMOTE_TOKEN;
   }
   const r = await apiAgent("/api/build", { method: "POST", body });
-  if (r.ok) trackJob(r.job_id, `备份 ${p.name}`, AGENT.base);
+  if (r.ok) {
+    delete projSizes[p.project_id];  // 打包后数据可能已变, 下次展开重算
+    trackJob(r.job_id, `备份 ${p.name}`, AGENT.base);
+  }
   else notify(t("build.failed") + (r.error || "?"), "err");
 }
 
