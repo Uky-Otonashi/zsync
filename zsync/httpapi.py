@@ -448,7 +448,7 @@ class Handler(BaseHTTPRequestHandler):
         # 连通性由设置页「测试连接」(/api/remote/list) 显式检查
         self._send_json({
             "ok": True,
-            "version": "0.4.2",
+            "version": "0.4.3",
             "mode": ctx.mode,
             "server": {
                 "port": ctx.port,
