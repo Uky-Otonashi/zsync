@@ -39,3 +39,10 @@ zcode 官方图标**只能本地自用**:把 `icon.ico` 放到 `assets/`、`icon
   `--store` 可覆盖。
 - 冒烟建议：`ZSYNC_GUI_AUTOCLOSE=10 ./dist/zsync-client.exe` 自动开窗 10 秒后自关，
   期间 `curl http://127.0.0.1:8643/api/state` 应答 `mode=agent`。
+
+## 产物去向
+
+构建出的 `zsync-client-<platform>-<arch>` 除上传 GitHub Release 外，还可以直接
+放进服务端目录旁的 `bin/`（源码部署=仓库根 `bin/`，单文件 server exe=其所在
+目录的 `bin/`）——Web 首访引导页即会直链下发、`tool.zip?bin=` 可打入引导包，
+详见 README「让服务器自己下发客户端产物」。`bin/` 里的文件不会被 git 跟踪。
