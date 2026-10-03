@@ -3,6 +3,7 @@
 
   agent   启动本机代理(127.0.0.1:8643, 供中央服务器页面跨源调用;
           桌面 GUI 模式会以内嵌线程自动拉起, 一般无需手动运行)
+  gui     桌面客户端(默认): 打开桌面窗口, agent 随窗口启停
   config  查看/修改客户端设置(zcode 目录、推送目标)
   projects        列出本机项目
   build   --project-id PID [--set k=v] [--archive-id ID] [--no-push]
@@ -90,6 +91,11 @@ def find_project(layout, project_id: str):
         ):
             return p
     raise SystemExit(f"项目不存在: {project_id} (用 projects 命令查看)")
+
+
+def cmd_gui(args):
+    from client import desktop
+    sys.exit(desktop.run_gui(store_dir=args.store, port=args.port))
 
 
 def cmd_agent(args):
@@ -411,6 +417,10 @@ def main():
     ap.add_argument("--zcode-home", help="覆盖本机 zcode 目录(默认读客户端配置/环境变量)")
     sub = ap.add_subparsers(dest="cmd")
 
+    s = sub.add_parser("gui", help="桌面客户端(默认): 窗口随开随用, agent 随窗口启停")
+    s.add_argument("--port", type=int, default=None, help="agent 端口(默认 8643, 被占自动顺延)")
+    s.set_defaults(func=cmd_gui)
+
     s = sub.add_parser("agent", help="启动本机 agent(127.0.0.1:8643, 供服务器页面/桌面 GUI 使用)")
     s.add_argument("--port", type=int, default=None, help="端口(默认 8643)")
     s.add_argument("--bind", default=None, help="绑定地址(默认 127.0.0.1)")
@@ -482,7 +492,10 @@ def main():
     s.add_argument("--project-id")
     s.set_defaults(func=cmd_selftest)
 
-    args = ap.parse_args()
+    argv = sys.argv[1:] or ["gui"]  # 无参数 → 桌面 GUI
+    args = ap.parse_args(argv)
+    if not hasattr(args, "func"):
+        ap.error("缺少子命令(无参数时默认进入 gui; 全局参数需放在子命令之前)")
     rc = args.func(args)
     sys.exit(rc or 0)
 

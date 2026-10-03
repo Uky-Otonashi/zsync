@@ -892,11 +892,10 @@ def _hostname() -> str:
     return os.environ.get("COMPUTERNAME") or socket.gethostname()
 
 
-def serve(port: int | None = None, bind: str | None = None, store_dir: str | None = None,
-          token: str | None = None, mode: str = "server") -> None:
-    """mode: server=中央服务器(默认 0.0.0.0:8642, 接收推送/拉取+Web GUI);
-    agent=客户端本机代理(默认 127.0.0.1:8643, 读写本机 zcode 目录,
-    供中央服务器页面经浏览器跨源调用, 亦为桌面 GUI 的同源后端)。"""
+def build_server(port: int | None = None, bind: str | None = None, store_dir: str | None = None,
+                 token: str | None = None, mode: str = "server"):
+    """构建(但不进入事件循环)HTTP 服务, 返回 (httpd, ctx)。
+    供桌面壳等需要自行控制 serve_forever/shutdown 的调用方使用。"""
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     store_dir = store_dir or os.path.join(root, "data")
     if port is None:
@@ -917,6 +916,15 @@ def serve(port: int | None = None, bind: str | None = None, store_dir: str | Non
         ctx.log("  agent 模式: 供本机浏览器跨源访问中央服务器页面 / 桌面 GUI 同源调用")
     elif not token:
         ctx.log("  警告: 未设置 token, 局域网内任何机器都可访问(开发模式)")
+    return httpd, ctx
+
+
+def serve(port: int | None = None, bind: str | None = None, store_dir: str | None = None,
+          token: str | None = None, mode: str = "server") -> None:
+    """前台运行。mode: server=中央服务器(默认 0.0.0.0:8642, 接收推送/拉取+Web GUI);
+    agent=客户端本机代理(默认 127.0.0.1:8643, 读写本机 zcode 目录,
+    供中央服务器页面经浏览器跨源调用, 亦为桌面 GUI 的同源后端)。"""
+    httpd, ctx = build_server(port, bind, store_dir, token, mode)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
