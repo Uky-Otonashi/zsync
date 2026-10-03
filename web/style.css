@@ -117,7 +117,10 @@ code {
   /* 顶部间距放容器 padding 而非 page-head margin: margin 会穿透折叠到吸顶盒外,
      头部要先滚 26px 才吸附且贴顶后间距丢失; padding 让盒子从 content 顶端起
      就位, 滚动 0 即吸附, 间距始终留在遮罩内 */
-  margin: 0 0 18px; padding: 26px 0 8px;
+  /* 横向负 margin 出血进 .content 的左右 padding 带: 卡片 box-shadow 会溢出
+     布局宽度画进 padding 区, 遮罩只盖到 padding 内缘时两侧会露出滚动的
+     阴影描边(暗色主题尤其明显), 必须盖住整条可视滚动区 */
+  margin: 0 -34px 18px; padding: 26px 34px 8px;
 }
 .page-sticky .sticky-in { max-width: 1180px; margin: 0 auto; }
 .page-sticky .page-head { margin: 0 0 18px; }
@@ -132,10 +135,10 @@ code {
 .brand { display: flex; align-items: center; gap: 11px; padding: 20px 20px 14px; }
 .brand-mark {
   width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
-  display: grid; place-items: center; color: var(--brand-fg);
-  background: var(--brand-bg);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, .2);
+  overflow: hidden;   /* logo 自带黑底, 不再垫 brand-bg 方块 */
+  display: grid; place-items: center;
 }
+.brand-mark img { width: 100%; height: 100%; display: block; }
 .brand-text { font-size: 17px; font-weight: 700; letter-spacing: .4px; }
 .brand-text small { display: block; font-size: 10.5px; font-weight: 400; color: var(--faint); margin-top: 1px; letter-spacing: .2px; }
 
@@ -938,7 +941,7 @@ body:not(.client-mode) #log-drawer { display: none; }
   .side-foot { display: none; }
   .content { padding: 0 16px 48px; overflow: visible; height: auto; min-width: 0; }
   .page-head { margin-top: 18px; }
-  .page-sticky { position: static; padding: 18px 0 0; margin-bottom: 0; }
+  .page-sticky { position: static; margin: 0; padding: 18px 0 0; }
   .page-sticky::after { content: none; }
   #log-drawer { left: 0; }
   .grid-2col { grid-template-columns: minmax(0, 1fr); }
