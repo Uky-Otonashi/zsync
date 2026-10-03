@@ -103,12 +103,32 @@ def _browser_fallback(httpd, ctx, url: str, reason: str) -> None:
     _stop_agent(httpd, ctx)
 
 
+def _alloc_hidden_console() -> None:
+    """windowed exe 无控制台时, 每个控制台子进程(git 探测等)都会被 Windows
+    独立分配可见控制台窗口并抢焦点——项目详情一次并行 7 条 git, 桌面就闪 7 个
+    窗口。给进程挂一个隐藏控制台, 子进程一律继承它, 不再新开窗口。
+    从终端启动时进程已有控制台(AllocConsole 失败), 保持原状。"""
+    if os.name != "nt":
+        return
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    if not kernel32.AllocConsole():
+        return  # 已有控制台(终端开发运行), 不动
+    hwnd = kernel32.GetConsoleWindow()
+    if not hwnd:  # 挂上了却拿不到窗口: 宁可退回无控制台, 不留任务栏残窗
+        kernel32.FreeConsole()
+        return
+    ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE
+
+
 def run_gui(store_dir: str | None = None, port: int | None = None) -> int:
     """打开桌面窗口; 返回退出码。
     pywebview 缺失 / WebView2 异常时降级为浏览器 + 前台驻留;
     任何未捕获异常写日志文件并退出(windowed exe 不允许弹 PyInstaller 对话框)。"""
     httpd = ctx = None
     try:
+        _alloc_hidden_console()
         store = store_dir or _default_store()
         httpd, ctx, port = _start_agent(store, port)
         url = f"http://127.0.0.1:{port}/"
